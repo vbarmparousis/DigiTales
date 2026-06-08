@@ -4,9 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/services.dart';
 
-
 Future<void> main() async {
-
   //Ensures Flutter bindings are initialized before
   //using asynchronous plugins like Hive.
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,8 +16,7 @@ Future<void> main() async {
   await Hive.openBox('storyBox');
 
   //Locks application orientation to portrait mode only.
-  await SystemChrome.setPreferredOrientations(
-      [DeviceOrientation.portraitUp]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   //Starts Application.
   runApp(const DigitalStorytellingApp());
@@ -33,9 +30,8 @@ class DigitalStorytellingApp extends StatelessWidget {
     return MaterialApp(
       title: 'Digital Storytelling',
       theme: ThemeData(
-
         //Added Font: Nunito
-        fontFamily:'Nunito',
+        fontFamily: 'Nunito',
 
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
@@ -46,13 +42,11 @@ class DigitalStorytellingApp extends StatelessWidget {
             fontWeight: FontWeight.bold,
 
             //Added Font: Nunito
-            fontFamily:'Nunito',
-
+            fontFamily: 'Nunito',
           ),
-        )
+        ),
       ),
       home: const SplashScreen(),
     );
   }
 }
-
