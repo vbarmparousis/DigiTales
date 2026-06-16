@@ -1,23 +1,26 @@
+//Import Libraries
+import 'dart:io';
+
 //Import Packages
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'dart:io';
 
 //My Imports
 import '../models/story.dart';
 import 'story_details_page.dart';
 import 'story_creation_page.dart';
+import 'edit_story_page.dart';
 
-//Statefull Widget rebuilds the screen
+//Stateful Widget rebuilds the screen
 //changes with setstate((){});
-class StoriesListPage extends StatefulWidget {
-  const StoriesListPage({super.key});
+class ParentListPage extends StatefulWidget {
+  const ParentListPage({super.key});
 
   @override
-  State<StoriesListPage> createState() => _StoriesListPageState();
+  State<ParentListPage> createState() => _ParentListPageState();
 }
 
-class _StoriesListPageState extends State<StoriesListPage> {
+class _ParentListPageState extends State<ParentListPage> {
   //Controls search TextField.
   final TextEditingController _searchController = TextEditingController();
 

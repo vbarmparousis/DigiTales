@@ -5,14 +5,14 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/services.dart';
 
 Future<void> main() async {
-  //Ensures Flutter bindings are initialized before
+  //Ensures Flutter is fully initialized before
   //using asynchronous plugins like Hive.
   WidgetsFlutterBinding.ensureInitialized();
 
   //Initializes Hive local storage.
   await Hive.initFlutter();
 
-  //Opens the local Hive Story Box.
+  //Opens the Hive box 'storyBox' that stores all created stories.
   await Hive.openBox('storyBox');
 
   //Locks application orientation to portrait mode only.
@@ -22,30 +22,36 @@ Future<void> main() async {
   runApp(const DigitalStorytellingApp());
 }
 
+//Main widget of the application.
 class DigitalStorytellingApp extends StatelessWidget {
   const DigitalStorytellingApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    //Basic structure of the app.
     return MaterialApp(
-      title: 'Digital Storytelling',
+      title: 'DigiTales',
       theme: ThemeData(
-        //Added Font: Nunito
+        //Sets Nunito as the default font of the app.
         fontFamily: 'Nunito',
 
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
+
+        //Default style for AppBar.
         appBarTheme: const AppBarTheme(
           titleTextStyle: TextStyle(
             color: Colors.black,
             fontSize: 25,
             fontWeight: FontWeight.bold,
 
-            //Added Font: Nunito
+            //Sets Nunito as the default font of the AppBar.
             fontFamily: 'Nunito',
           ),
         ),
       ),
+
+      //Splash Screen. The first screen of the application.
       home: const SplashScreen(),
     );
   }

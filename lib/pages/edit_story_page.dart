@@ -1,14 +1,14 @@
 //Import Packages
-import 'package:flutter/material.dart';
-import 'package:record/record.dart';
-import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 
 //My Imports
-import 'button_styles.dart';
 import '../models/story.dart';
+import 'button_styles.dart';
+import '../widgets/recording_bottom_sheet.dart';
+import '../widgets/section_card.dart';
 
 class EditStoryPage extends StatefulWidget {
   //Holds the story object from the previous page
@@ -24,167 +24,465 @@ class EditStoryPage extends StatefulWidget {
 
 //Private Class (underscore: _)
 class _EditStoryPageState extends State<EditStoryPage> {
-  //Holds the Title of the Story
+  //Controls the story title TextField
   final TextEditingController _titleController = TextEditingController();
 
-  //Audio Recorder
-  final AudioRecorder _audioRecorder = AudioRecorder();
-
-  //ImagePicker allows to pick an image from gallery.
+  //Allows to pick images from device gallery.
   final ImagePicker imagePicker = ImagePicker();
 
-  //Stores the local file path of the selected image.
+  //Stores the local file path of the selected cover image.
   String coverImagePath = '';
 
-  //Boolean that checks if audio is being recorded.
-  bool isRecording = false;
+  //Stores the local file path of the selected page image.
+  String pageImagePath = '';
 
-  //String that holds the local directory path
-  //where the recorded audio file will be saved.
+  //Stores all pages of a story.
+  List<StoryPage> pages = [];
+
+  //Stores the local file path of the selected page's recorded audio.
   String audioPath = '';
 
-  //Stores audio duration in seconds.
+  //Stores the duration (in seconds) of the selected page's recorded audio.
   int audioDuration = 0;
 
-  //Timer that updates recording duration.
-  Timer? recordingTimer;
+  //Controls the story pages preview carousel.
+  final PageController pagePreviewController = PageController();
 
-  //Stores current recording duration.
-  int recordingSeconds = 0;
+  //Page preview audio player.
+  final AudioPlayer pagePreviewAudioPlayer = AudioPlayer();
 
-  String formatRecordingTime(int seconds) {
-    return Duration(
-      seconds: seconds,
-    ).toString().split('.').first.padLeft(8, '0');
+  //Stores the selected page index.
+  int selectedPageIndex = 0;
+
+  //Checks if the selected page audio is being played.
+  //It is used to switch between Play and Pause buttons.
+  bool isPreviewPlaying = false;
+
+  //Stores the selected page audio duration.
+  Duration previewDuration = Duration.zero;
+
+  //Stores selected page audio playback position.
+  Duration previewPosition = Duration.zero;
+
+  //Formats seconds into MM:SS format.
+  String formatTime(int seconds) {
+    //Calculates the amount of full minutes (exactly 60 seconds).
+    final minutes = seconds ~/ 60;
+
+    //Calculates the remaining seconds after removing the amount of full minutes.
+    final remainingSeconds = seconds % 60;
+
+    //Minutes and remaining seconds will always have two digits.
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  //Opens device gallery and allows
+  //Runs once when the Page is first created.
+  @override
+  void initState() {
+    super.initState();
+
+    //Loads the existing story title into the TextField.
+    _titleController.text = widget.story.title;
+
+    //Loads the existing cover image.
+    coverImagePath = widget.story.coverImage;
+
+    //Loads the existing story pages in order to create
+    //a local editable copy of the pages list.
+    pages = List<StoryPage>.from(widget.story.pages);
+
+    //Initialization of Audio Listeners.
+
+    //Listens for audio state changes (playing, paused).
+    pagePreviewAudioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() {
+        //If the audio player state is 'playing',
+        //isPreviewPlaying becomes true.
+        //Otherwise, isPreviewPlaying becomes false.
+        isPreviewPlaying = state == PlayerState.playing;
+      });
+    });
+
+    //Listens for changes in the selected page audio duration.
+    pagePreviewAudioPlayer.onDurationChanged.listen((newDuration) {
+      //Keeps the longest valid duration as the maximum duration
+      //of the preview audio slider.
+      setState(() {
+        previewDuration = newDuration;
+      });
+    });
+
+    //Listens for changes in the selected page audio position.
+    pagePreviewAudioPlayer.onPositionChanged.listen((newPosition) {
+      //Updates the current slider position while the audio is being played.
+      setState(() {
+        previewPosition = newPosition;
+      });
+    });
+
+    //Listens for when the selected page audio finishes completely.
+    pagePreviewAudioPlayer.onPlayerComplete.listen((event) {
+      //Stops audio, audio button returns to 'Play'
+      //and resets the audio slider position back to the beginning.
+      setState(() {
+        isPreviewPlaying = false;
+        previewPosition = Duration.zero;
+      });
+      pagePreviewAudioPlayer.seek(Duration.zero);
+    });
+  }
+
+  //Opens device gallery and allows the
   //user to pick a cover image for the story.
   Future<void> pickCoverImage() async {
+    //Opens device gallery and waits for the user to pick a cover image.
+
+    //The '?' in XFile is for when the user closes the device gallery
+    //without picking a cover image. (Nullable)
     final XFile? selectedImage = await imagePicker.pickImage(
       source: ImageSource.gallery,
     );
 
-    //If the image selection is canceled, stop the function.
+    //If the image selection is canceled, the function stops.
     if (selectedImage == null) {
       return;
     }
 
-    //Stores the selected image file path and updates the UI.
+    //Stores the selected image file path and updates the UI in order
+    //to show the selected cover image.
     setState(() {
       coverImagePath = selectedImage.path;
     });
   }
 
-  //Starts Audio Recording
-  Future<void> startRecording() async {
-    //Prevents the start of another recording while
-    //an audio is already being recorded.
-    if (isRecording) return;
+  //Opens device gallery and allows the
+  //user to pick an image for the current page of the story.
+  Future<void> pickPageImage() async {
+    //Opens device gallery and waits for the user to pick a page image.
 
-    //Waits for microphone permission before starting recording.
-    if (await _audioRecorder.hasPermission()) {
-      //Permission granted, proceed with recording
+    //The '?' in XFile is for when the user closes the device gallery
+    //without picking a page image. (Nullable)
+    final XFile? selectedImage = await imagePicker.pickImage(
+      source: ImageSource.gallery,
+    );
 
-      //Gets the application's local document directory.
-      final directory = await getApplicationDocumentsDirectory();
-      //print('Path=============================: ${directory.path}');
-
-      //Replaces special character in the date in order
-      //to avoid errors on filename path.
-      final now = DateTime.now()
-          .toString()
-          .replaceAll(':', '_')
-          .replaceAll(' ', '_');
-
-      //Creates the full local directory path in order to save the audio file.
-      final filePath = '${directory.path}/audio_recording_$now.m4a';
-
-      audioPath = filePath;
-
-      //Starts Recording audio and saves it into the previously created path
-      await _audioRecorder.start(const RecordConfig(), path: audioPath);
-
-      //Updates the UI and sets isRecording as true.
-      setState(() {
-        isRecording = true;
-      });
-
-      //Starts recording timer.
-      recordingTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-        setState(() {
-          recordingSeconds++;
-        });
-      });
-    } else {
-      //print ('Microphone Permission Denied');
+    //If the image selection is canceled, the function stops.
+    if (selectedImage == null) {
+      return;
     }
-  }
 
-  //Stops audio recording.
-  Future<void> stopRecording() async {
-    //Prevents stopping if there is no active audio recording
-    if (!isRecording) return;
-
-    //Stops Recording and returns the final file path.
-    final path = await _audioRecorder.stop();
-
-    //Stops recording timer.
-    recordingTimer?.cancel();
-
-    //Updates recording state to false and saves the final audio path.
+    //Stores the selected image file path and updates the UI in order
+    //to show the selected page image.
     setState(() {
-      isRecording = false;
-
-      //Stores the final recording duration.
-      audioDuration = recordingSeconds;
-      //Resets recording counter.
-      recordingSeconds = 0;
-
-      //Stores the final audio file path.
-      if (path != null) {
-        audioPath = path;
-      }
+      pageImagePath = selectedImage.path;
     });
   }
 
-  //initState runs when the page opens
-  @override
-  void initState() {
-    super.initState();
-
-    //Loads existing story title, description, audio path and cover image.
-    _titleController.text = widget.story.title;
-    coverImagePath = widget.story.coverImage;
-    if (widget.story.pages.isNotEmpty) {
-      audioPath = widget.story.pages.first.pageAudio;
-      audioDuration = widget.story.pages.first.pageAudioDuration;
+  //Adds a new page to the story.
+  //In order to add a new page, the user must select a page image
+  //and a page audio recording.
+  void addPage() {
+    //Checks if a page image has been selected.
+    //If not, the page cannot be added and the proper message appears.
+    if (pageImagePath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a page image before adding a page.'),
+        ),
+      );
+      //Stops the function.
+      return;
     }
+
+    //Checks if an audio has been recorded.
+    //If not, the page cannot be added and the proper message appears.
+    if (audioPath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please record audio before adding a new page.'),
+        ),
+      );
+      //Stops the function.
+      return;
+    }
+
+    //Updates the UI after adding the new page.
+    setState(() {
+      //Creates a new StoryPage object and adds it to the page list.
+      pages.add(
+        StoryPage(
+          pageImage: pageImagePath,
+          pageAudio: audioPath,
+          pageAudioDuration: audioDuration,
+        ),
+      );
+
+      //Clears current page's image because the next page
+      //will need a new image.
+      pageImagePath = '';
+
+      //Clears current page's audio because the next page
+      //will need a new audio recording.
+      audioPath = '';
+
+      //Resets page's audio duration.
+      audioDuration = 0;
+    });
+
+    //Shows confirmation message after the page is added to the story.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Page ${pages.length} added to the story.')),
+    );
+  }
+
+  //Plays the selected preview page audio.
+  Future<void> playPreviewAudio() async {
+    //If there are no pages, the function stops.
+    if (pages.isEmpty) {
+      return;
+    }
+
+    //Gets the audio path of the selected page.
+    final selectedPageAudio = pages[selectedPageIndex].pageAudio;
+
+    //If there is no audio path on the selected page,
+    //the function stops.
+    if (selectedPageAudio.isEmpty) {
+      return;
+    }
+
+    //Plays the selected page audio from the local device file path.
+    await pagePreviewAudioPlayer.play(DeviceFileSource(selectedPageAudio));
+  }
+
+  //Pauses the selected preview page audio.
+  Future<void> pausePreviewAudio() async {
+    //Pauses the current playback and keeps the current position,
+    //so if the user presses play again, the audio continues from
+    //the point it stopped.
+    await pagePreviewAudioPlayer.pause();
+  }
+
+  //Changes the preview page on carousel everytime the user swipes
+  //left or right.
+  Future<void> changePreviewPage(int index) async {
+    //Stops any preview audio that may already be playing.
+    await pagePreviewAudioPlayer.stop();
+
+    //Updates the UI by showing the next/previous story and resetting
+    //the audio parameters.
+    setState(() {
+      selectedPageIndex = index;
+      isPreviewPlaying = false;
+      previewDuration = Duration.zero;
+      previewPosition = Duration.zero;
+    });
+  }
+
+  //Moves the preview carousel to previous page.
+  Future<void> goToPreviousPreviewPage() async {
+    //If the first page is selected, the function stops.
+    if (selectedPageIndex <= 0) {
+      return;
+    }
+
+    //Moves the PageView to the previous page with a smooth animation.
+    await pagePreviewController.previousPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  //Moves the preview carousel to next page.
+  Future<void> goToNextPreviewPage() async {
+    //If the last page is selected, the function stops.
+    if (selectedPageIndex >= pages.length - 1) {
+      return;
+    }
+
+    //Moves the PageView to the next page with a smooth animation.
+    await pagePreviewController.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  //Changes selected page preview image.
+  Future<void> changeSelectedPagePreviewImage() async {
+    //If there are no pages, the function stops.
+    if (pages.isEmpty) {
+      return;
+    }
+
+    //Opens device gallery and waits for the user to pick a new page image.
+
+    //The '?' in XFile is for when the user closes the device gallery
+    //without picking a new page image. (Nullable)
+    final XFile? selectedImage = await imagePicker.pickImage(
+      source: ImageSource.gallery,
+    );
+
+    //If the image selection is canceled, the function stops.
+    if (selectedImage == null) {
+      return;
+    }
+
+    //Updates the selected page image.
+    setState(() {
+      //Stores the old selected StoryPage before replacing it.
+      //This is needed because StoryPage fields are final,
+      //so instead of changing only the image field, it creates
+      //a new StoryPage object with the updated image but
+      //the old audio and audio duration.
+      final StoryPage oldPage = pages[selectedPageIndex];
+
+      //Replaces the selected StoryPage with a new StoryPage object.
+      pages[selectedPageIndex] = StoryPage(
+        //New selected image.
+        pageImage: selectedImage.path,
+
+        //Keeps the old audio and audio duration.
+        pageAudio: oldPage.pageAudio,
+        pageAudioDuration: oldPage.pageAudioDuration,
+      );
+    });
+  }
+
+  //Changes selected page preview audio.
+  Future<void> changeSelectedPagePreviewAudio() async {
+    //If there are no pages, the function stops.
+    if (pages.isEmpty) {
+      return;
+    }
+
+    //Opens recording bottom sheet.
+    //It returns an AudioRecording object.
+    final recording = await showRecordingBottomSheet(context);
+
+    //If the audio recording is canceled, stop the function.
+    if (recording == null) {
+      return;
+    }
+
+    //Stops any preview audio that may already be playing.
+    await pagePreviewAudioPlayer.stop();
+
+    //Updates the selected page audio and audio duration.
+    setState(() {
+      //Stores the old selected StoryPage before replacing it.
+      //This is needed because StoryPage fields are final,
+      //so instead of changing only the audio path and audio duration
+      //fields, it creates a new StoryPage object with the updated
+      //audio and audio duration but the old image.
+      final StoryPage oldPage = pages[selectedPageIndex];
+
+      pages[selectedPageIndex] = StoryPage(
+        //Keeps the old page image.
+        pageImage: oldPage.pageImage,
+        //New recorded audio path and audio duration.
+        pageAudio: recording.audioPath,
+        pageAudioDuration: recording.audioDuration,
+      );
+
+      //Resets preview audio parameters.
+      isPreviewPlaying = false;
+      previewDuration = Duration.zero;
+      previewPosition = Duration.zero;
+    });
+  }
+
+  //Deletes the selected preview page.
+  Future<void> deleteSelectedPage() async {
+    //If there are no pages, the function stops.
+    if (pages.isEmpty) {
+      return;
+    }
+
+    //Shows delete confirmation dialog
+    //to prevent page deletions by mistake.
+    final bool? confirmDeletePage = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Delete Page'),
+        content: Text('Are you sure you want to delete this page?'),
+        actions: [
+          //Cancel Button.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, false);
+            },
+            child: Text('Cancel'),
+          ),
+
+          //Confirm deletion button.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, true);
+            },
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    //If the user cancels the alert dialog, the function stops.
+    if (confirmDeletePage != true) {
+      return;
+    }
+
+    //Stops any preview audio that may already be playing.
+    await pagePreviewAudioPlayer.stop();
+
+    //Updates the page list and the UI.
+    setState(() {
+      //Removes the selected page from the page list.
+      pages.removeAt(selectedPageIndex);
+
+      //If there are no pages left, resets selectedPageIndex to 0.
+      if (pages.isEmpty) {
+        selectedPageIndex = 0;
+      }
+      //If the deleted page was the last page, moves the
+      //selectedPageIndex to the new last page.
+      else if (selectedPageIndex >= pages.length) {
+        selectedPageIndex = pages.length - 1;
+      }
+
+      //Resets preview audio parameters.
+      isPreviewPlaying = false;
+      previewDuration = Duration.zero;
+      previewPosition = Duration.zero;
+    });
   }
 
   @override
-  //Clean Memory when Page Closes
+  //Cleans memory when Page closes.
   void dispose() {
+    //Disposes the title controller.
     _titleController.dispose();
-    _audioRecorder.dispose();
-
-    //Stops the recording timer when the page closes.
-    recordingTimer?.cancel();
-
+    //Disposes the page controller used by the preview carousel.
+    pagePreviewController.dispose();
+    //Disposes the audio controller used by the preview carousel.
+    pagePreviewAudioPlayer.dispose();
+    //Calls the parent dispose method to complete the cleanup.
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    //Everytime SetState() is called, this method runs and rebuilds the UI.
     return Scaffold(
       appBar: AppBar(
-        //Same Background as the Home Page
+        //Same AppBar background as the Home Page.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
 
         title: const Text('Edit Story'),
       ),
 
-      //Allows page scroll when keyboard appears
+      //Allows page scroll and prevents overflow issues
+      //when the keyboard appears.
       body: SingleChildScrollView(
         child: Padding(
           //Adds spacing so the UI doesn't touch the screen borders.
@@ -192,118 +490,616 @@ class _EditStoryPageState extends State<EditStoryPage> {
           child: Column(
             //Column stretches widgets vertically.
             crossAxisAlignment: CrossAxisAlignment.stretch,
-
             children: [
-              const Text(
-                'Edit your Story Here',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              //1. Section Card: Story Information (Title + Cover Image).
+              SectionCard(
+                title: 'Story Information',
+                icon: Icons.info_rounded,
+                children: [
+                  const SizedBox(height: 15),
+
+                  //Story Title Field.
+                  TextField(
+                    controller: _titleController,
+                    decoration: InputDecoration(
+                      labelText: 'Edit Story Title',
+                      labelStyle: const TextStyle(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  //Cover Image Preview.
+
+                  //Displays the selected cover image.
+                  if (coverImagePath.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(25),
+                      child: Image.file(
+                        File(coverImagePath),
+                        height: 160,
+                        width: double.infinity,
+                        //Crops image to fit the preview area.
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    //Default Image Placeholder.
+                    Container(
+                      height: 160,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.teal.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.image_rounded,
+                        size: 70,
+                        color: Colors.teal,
+                      ),
+                    ),
+
+                  const SizedBox(height: 20),
+
+                  //Select Cover Image Button.
+                  ElevatedButton.icon(
+                    //Imported button style.
+                    style: ButtonStyles.primaryParentButton,
+                    onPressed: pickCoverImage,
+                    icon: const Icon(Icons.image_rounded),
+                    label: Text(
+                      coverImagePath.isEmpty
+                          ? 'Select Cover Image'
+                          : 'Select a new Cover Image',
+                    ),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 32),
+              //2. Section Card: Page Creation.
+              SectionCard(
+                title: 'Current Page',
+                icon: Icons.auto_stories_rounded,
+                children: [
+                  //Page Image Preview
+                  if (pageImagePath.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(25),
+                      child: Image.file(
+                        File(pageImagePath),
+                        height: 160,
+                        width: double.infinity,
+                        //Crops image to fit the preview area.
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    //Default Image Placeholder.
+                    Container(
+                      height: 160,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.teal.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.image_rounded,
+                        size: 70,
+                        color: Colors.teal,
+                      ),
+                    ),
 
-              //Cover Image Preview
-              if (coverImagePath.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(35),
-                  child: Image.file(
-                    File(coverImagePath),
-                    height: 200,
+                  const SizedBox(height: 20),
+
+                  //Select Page Image Button.
+                  ElevatedButton.icon(
+                    //Imported button style.
+                    style: ButtonStyles.primaryParentButton,
+                    onPressed: pickPageImage,
+                    icon: const Icon(Icons.image_rounded),
+                    label: Text(
+                      pageImagePath.isEmpty
+                          ? 'Select Page Image'
+                          : 'Select a new Page Image',
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  //Record Page Audio Button.
+                  ElevatedButton.icon(
+                    //Imported button style.
+                    style: ButtonStyles.audioParentButton,
+
+                    onPressed: () async {
+                      //Opens recording bottom sheet.
+                      //It returns an AudioRecording object.
+                      final recording = await showRecordingBottomSheet(context);
+
+                      if (recording != null) {
+                        setState(() {
+                          audioPath = recording.audioPath;
+                          audioDuration = recording.audioDuration;
+                        });
+                      }
+                    },
+                    icon: const Icon(Icons.mic_rounded),
+                    label: const Text('Record Page Audio'),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  //Audio status container.
+                  Container(
                     width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                //Story Title Field
-                child: TextField(
-                  controller: _titleController,
-                  decoration: InputDecoration(
-                    labelText: 'Edit Story Title',
-                    labelStyle: const TextStyle(
-                      color: Colors.teal,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(35),
+                    decoration: BoxDecoration(
+                      //Changes container background color depending
+                      //on audio existence.
+                      color: audioPath.isEmpty
+                          ? Colors.grey.withValues(alpha: 0.08)
+                          : Colors.teal.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        width: 1.2,
+                        color: audioPath.isEmpty
+                            ? Colors.grey.withValues(alpha: 0.4)
+                            : Colors.teal.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        //Audio Recording Status Icon.
+                        Icon(
+                          //Changes status icon depending
+                          //on audio existence.
+                          audioPath.isEmpty
+                              ? Icons.mic_off_rounded
+                              : Icons.check_circle_rounded,
+                          color: audioPath.isEmpty ? Colors.grey : Colors.teal,
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        Text(
+                          //Changes status text depending
+                          //on audio existence.
+                          audioPath.isEmpty
+                              ? 'No audio recorded.'
+                              : 'Audio recorded.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: audioPath.isEmpty
+                                //Changes status text color depending
+                                //on audio existence.
+                                ? Colors.grey
+                                : Colors.teal,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+
+                  const SizedBox(height: 20),
+
+                  //Pages counter.
+                  //Shows the number of added pages to the current story.
+                  Center(
+                    child: Chip(
+                      avatar: const Icon(Icons.auto_stories_rounded),
+                      label: Text('${pages.length} pages added.'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  //Add Page Button.
+                  ElevatedButton.icon(
+                    //Imported button style.
+                    style: ButtonStyles.primaryParentButton,
+
+                    //Adds the current page to the pages list.
+                    onPressed: addPage,
+
+                    icon: const Icon(Icons.add_circle_rounded),
+                    label: const Text('Add Page'),
+                  ),
+                ],
+              ),
+
+              //3. Section Card: Preview Carousel.
+
+              //Shows the selection card if there is at least
+              //one page added to the story.
+              if (pages.isNotEmpty) ...[
+                SectionCard(
+                  title: 'Story Pages Preview',
+                  icon: Icons.view_carousel_rounded,
+                  children: [
+                    SizedBox(
+                      height: 270,
+                      //Stacks left and right arrows in front of the preview page.
+                      child: Stack(
+                        alignment: Alignment.center,
+
+                        children: [
+                          //Creates a swipeable carousel.
+                          PageView.builder(
+                            //Controls the PageView movements.
+                            controller: pagePreviewController,
+
+                            itemCount: pages.length,
+                            onPageChanged: changePreviewPage,
+                            //Builds each preview page.
+                            itemBuilder: (context, index) {
+                              //Gets the StoryPage object at the current index.
+                              final StoryPage page = pages[index];
+
+                              return Column(
+                                children: [
+                                  //Selected page image preview.
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(25),
+                                    child: Image.file(
+                                      File(page.pageImage),
+                                      height: 160,
+                                      width: double.infinity,
+                                      //Crops image to fit the preview area.
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 12),
+
+                                  //Page Number Chip.
+                                  Chip(
+                                    avatar: const Icon(
+                                      Icons.auto_stories_rounded,
+                                      size: 18,
+                                    ),
+
+                                    //Shows the number of the current page preview
+                                    //out of the total number of added pages.
+                                    label: Text(
+                                      'Page ${index + 1} of ${pages.length}',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 8),
+
+                                  //Shows the audio duration of the current page preview.
+                                  Text(
+                                    //Formats seconds into MM:SS format.
+                                    'Audio duration: ${formatTime(page.pageAudioDuration)}',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+
+                          //Left Arrow.
+
+                          //Shows Left Arrow only when there is more than one page
+                          //and the selected page is not the first page.
+                          if (pages.length > 1 && selectedPageIndex > 0)
+                            Positioned(
+                              left: 0,
+                              top: 175,
+                              child: CircleAvatar(
+                                backgroundColor: Colors.teal.withValues(
+                                  alpha: 0.5,
+                                ),
+                                child: IconButton(
+                                  //Moves carousel to the previous page.
+                                  onPressed: goToPreviousPreviewPage,
+
+                                  icon: const Icon(
+                                    Icons.chevron_left_rounded,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          //Right Arrow.
+                          //Shows Right Arrow only when there is more than one page
+                          //and the selected page is not the last page.
+                          if (pages.length > 1 &&
+                              selectedPageIndex < pages.length - 1)
+                            Positioned(
+                              right: 0,
+                              top: 175,
+                              child: CircleAvatar(
+                                backgroundColor: Colors.teal.withValues(
+                                  alpha: 0.5,
+                                ),
+                                child: IconButton(
+                                  //Moves carousel to the next page.
+                                  onPressed: goToNextPreviewPage,
+
+                                  icon: const Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    //Page Indicator Dots.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      //Creates one dot for every added page.
+                      children: List.generate(pages.length, (index) {
+                        //Checks if the dot represents the selected story preview.
+                        final bool isSelected = index == selectedPageIndex;
+
+                        //Page Indicator Dots Animation.
+                        return AnimatedContainer(
+                          //The duration of the animation.
+                          duration: const Duration(milliseconds: 250),
+
+                          //Horizontal spacing between dots.
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          height: 8,
+                          //selected dot is wider than the others.
+                          width: isSelected ? 16 : 8,
+                          decoration: BoxDecoration(
+                            //Changes selected dot's color to differentiate it
+                            //from the rest.
+                            color: isSelected
+                                ? Colors.teal
+                                : Colors.grey.withValues(alpha: 0.35),
+                            //Makes dot rounded.
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        );
+                      }),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    //Audio Preview Container.
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.grey.withValues(alpha: 0.25),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              //Play/Pause Button.
+                              IconButton(
+                                iconSize: 56,
+                                color: Colors.orange,
+
+                                onPressed: () {
+                                  //If the selected preview audio is playing,
+                                  //the button pauses it.
+                                  if (isPreviewPlaying) {
+                                    pausePreviewAudio();
+                                  }
+                                  //If the selected preview audio is not playing,
+                                  //the button starts the playback.
+                                  else {
+                                    playPreviewAudio();
+                                  }
+                                },
+                                icon: Icon(
+                                  //Changes dynamically the button icon between Play and Pause.
+                                  isPreviewPlaying
+                                      ? Icons.pause_circle_filled_rounded
+                                      : Icons.play_circle_filled_rounded,
+                                ),
+                              ),
+
+                              //Expanded gives the audio player slider all the remaining horizontal space.
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                    //Audio Player Slider.
+                                    Slider(
+                                      min: 0,
+
+                                      //If previewDuration is bigger than 0, it is used as the maximum
+                                      //value of the audio player slider.
+                                      //If previewDuration is 0, the maximum value becomes 1
+                                      //to avoid errors.
+                                      max:
+                                          previewDuration.inSeconds.toDouble() >
+                                              0
+                                          ? previewDuration.inSeconds.toDouble()
+                                          : 1,
+
+                                      //The value of the slider is the current audio position.
+                                      //clamp() prevents slider's value from becoming smaller than 0 and
+                                      //bigger than the maximum audio duration.
+                                      value: previewPosition.inSeconds
+                                          .toDouble()
+                                          .clamp(
+                                            0,
+                                            previewDuration.inSeconds
+                                                        .toDouble() >
+                                                    0
+                                                ? previewDuration.inSeconds
+                                                      .toDouble()
+                                                : 1,
+                                          ),
+
+                                      activeColor: Colors.teal,
+                                      inactiveColor: Colors.grey,
+
+                                      onChanged: (value) async {
+                                        //Changes current audio position to another position
+                                        //by dragging the slider.
+                                        await pagePreviewAudioPlayer.seek(
+                                          Duration(seconds: value.toInt()),
+                                        );
+                                      },
+                                    ),
+
+                                    //Audio Time Row.
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        //Current audio position.
+
+                                        //Formats seconds into MM:SS format.
+                                        Text(
+                                          formatTime(previewPosition.inSeconds),
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+
+                                        //Remaining audio time.
+
+                                        //Formats seconds into MM:SS format.
+                                        //clamp() prevents remaining time from becoming
+                                        //smaller than 0 and bigger than tha maximum audio duration.
+                                        Text(
+                                          formatTime(
+                                            (previewDuration - previewPosition)
+                                                .inSeconds
+                                                .clamp(
+                                                  0,
+                                                  previewDuration.inSeconds,
+                                                ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    //Change Selected Page Image Button.
+                    ElevatedButton.icon(
+                      style: ButtonStyles.secondaryParentButton,
+                      onPressed: changeSelectedPagePreviewImage,
+                      icon: const Icon(Icons.image_rounded),
+                      label: const Text('Change Image'),
+                    ),
+                    const SizedBox(height: 16),
+
+                    //Change Selected Page Audio Button.
+                    ElevatedButton.icon(
+                      style: ButtonStyles.audioParentButton,
+                      onPressed: changeSelectedPagePreviewAudio,
+                      icon: const Icon(Icons.mic_rounded),
+                      label: const Text('Change Audio'),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    //Delete Selected Page Button.
+                    ElevatedButton.icon(
+                      style: ButtonStyles.outlinedRedParentButton,
+                      onPressed: deleteSelectedPage,
+                      icon: const Icon(Icons.delete_rounded),
+                      label: const Text('Delete Page'),
+                    ),
+                  ],
                 ),
-              ),
+              ],
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 12),
 
-              //Select Cover Image Button
-              ElevatedButton(
+              //Update Story Button.
+              ElevatedButton.icon(
                 //Imported button style.
-                style: ButtonStyles.tealButton,
-
-                onPressed: pickCoverImage,
-                child: Text(
-                  coverImagePath.isEmpty
-                      ? 'Select a Cover Image'
-                      : 'Select a new Cover Image',
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              ElevatedButton(
-                //Imported button style.
-                style: ButtonStyles.audioButton,
-
-                onPressed: () {
-                  //Changes dynamically the recording button
-                  //between 'Start Recording' and 'Stop Recording'.
-                  if (isRecording) {
-                    stopRecording();
-                  } else {
-                    startRecording();
-                  }
-                },
-                child: Text(isRecording ? 'Stop Recording' : 'Start Recording'),
-              ),
-
-              Text(
-                isRecording
-                    ? 'Recording: ${formatRecordingTime(recordingSeconds)}'
-                    : 'Not Recording',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16),
-              ),
-
-              const SizedBox(height: 32),
-
-              //Story Edit Button
-              ElevatedButton(
-                //Imported button style.
-                style: ButtonStyles.tealButton,
+                style: ButtonStyles.primaryParentButton,
 
                 onPressed: () async {
-                  //trim() trims the spaces on the beginning
-                  // and end of title.
+                  //Gets the edited story title from the TextField.
+                  //trim() removes the spaces from the
+                  //beginning and the end of title.
                   final storyTitle = _titleController.text.trim();
+
                   //Checks if story title is empty.
                   //If it is empty, it shows the appropriate
                   //message at the bottom of the screen.
                   if (storyTitle.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Please Enter a Story Title')),
+                      const SnackBar(
+                        content: Text('Please enter a story title.'),
+                      ),
+                    );
+                  }
+                  //Checks if the cover Image path is empty.
+                  //If it is empty, it shows the appropriate
+                  //message at the bottom of the screen.
+                  else if (coverImagePath.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please select a cover image.'),
+                      ),
+                    );
+                  }
+                  //Checks if story has at least one page.
+                  //If there are no pages, it shows the appropriate
+                  //message at the bottom of the screen.
+                  else if (pages.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please add at least one page before updating.',
+                        ),
+                      ),
                     );
                   } else {
-                    //Displays Update confirmation dialog.
-                    bool? confirmUpdate = await showDialog(
+
+                    //Shows update confirmation dialog
+                    //to prevent page updates by mistake.
+                    final bool? confirmUpdateStory = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
                         backgroundColor: Colors.white,
                         title: Text('Update Story'),
-                        content: Text(
-                          'Are you sure you want to update this story?',
-                        ),
+                        content: Text('Are you sure you want to update this story?'),
                         actions: [
-                          //Cancel button.
+                          //Cancel Button.
                           TextButton(
                             onPressed: () {
                               Navigator.pop(context, false);
@@ -311,54 +1107,45 @@ class _EditStoryPageState extends State<EditStoryPage> {
                             child: Text('Cancel'),
                           ),
 
-                          //Confirm Update button.
+                          //Confirm update button.
                           TextButton(
                             onPressed: () {
                               Navigator.pop(context, true);
                             },
-                            child: Text('Update'),
+                            child: Text('Update', style: TextStyle(color: Colors.teal)),
                           ),
                         ],
                       ),
                     );
 
-                    if (confirmUpdate != true) {
+                    //If the user cancels the alert dialog, the function stops.
+                    if (confirmUpdateStory != true) {
                       return;
                     }
+
+                    //Creates an new Story object with the entered values.
+                    final updatedStory = Story(
+                      title: storyTitle,
+                      coverImage: coverImagePath,
+                      pages: pages,
+
+                      //Keeps the same Hive key as the original story.
+                      hiveKey: widget.story.hiveKey,
+                    );
 
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Story Updated: $storyTitle')),
                     );
 
-                    //Creates an updated Story object with the new values.
-                    final updatedStory = Story(
-                      title: storyTitle,
-                      coverImage: coverImagePath,
-                      pages: [
-                        StoryPage(
-                          pageImage: coverImagePath,
-                          pageAudio: audioPath,
-                          pageAudioDuration: audioDuration,
-                        ),
-                      ],
-                    );
 
-                    //Closes the page and returns the new story to the previous page.
+                    //Closes the page and returns the newly created
+                    //story to the previous page.
                     Navigator.pop(context, updatedStory);
                   }
                 },
-                child: const Text('Update Story'),
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('Update Story'),
               ),
-
-              const SizedBox(height: 12),
-              /*Text(
-                    audioPath.isEmpty
-                        ?'No Audio Recorded'
-                        : 'Audio Recorded',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 16)
-
-                  )  ,*/
             ],
           ),
         ),

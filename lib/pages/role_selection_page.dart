@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 
 //My Imports
-import 'stories_list_page.dart';
-import 'child_home_page.dart';
+import 'parent_list_page.dart';
+import 'child_list_page.dart';
 import '../widgets/app_background.dart';
 import '../widgets/role_selection_card.dart';
 
 //First Page of the application
-//The user selects between Parent and Child role.
+//The user selects between Parent Mode and Child role.
 class UserSelectionPage extends StatefulWidget {
   const UserSelectionPage({super.key});
 
@@ -18,15 +18,19 @@ class UserSelectionPage extends StatefulWidget {
 }
 
 class _UserSelectionPageState extends State<UserSelectionPage> {
+  //Device Authentication for Parent Mode.
   final LocalAuthentication parentModeAuthentication = LocalAuthentication();
 
   //Uses the device lock system before opening Parent Mode.
   Future<bool> authenticateParentMode() async {
     try {
+      //Checks if the device supports biometrics
+      //or another authentication method.
       final bool canAuthenticate =
           await parentModeAuthentication.canCheckBiometrics ||
           await parentModeAuthentication.isDeviceSupported();
 
+      //If authentication is not available, shows appropriate message.
       if (!canAuthenticate) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -35,17 +39,24 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
         );
         return false;
       }
+
+      //Device Authentication Screen.
       final bool isAuthenticated = await parentModeAuthentication.authenticate(
         localizedReason: 'Please authenticate to enter Parent Mode.',
         biometricOnly: false,
         persistAcrossBackgrounding: true,
       );
+
+      //Returns true only if the authentication was successful.
       return isAuthenticated;
-    } catch (error) {
+    }
+    //Handles errors during authentication.
+    catch (error) {
+      //If authentication can't be used, shows appropriate message.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Parent Mode requires a device screen lock. Please set up a screen lock on your device to use Parent Mode',
+            'Parent Mode requires device authentication. Please set up a screen lock to continue',
           ),
         ),
       );
@@ -56,12 +67,6 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        //Uses the same app bar background color as the rest of the app.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Digi-Tales'),
-      ),
-
       body:
           // AppBackground(
           //child:
@@ -73,30 +78,34 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
               //Column stretches widgets vertically.
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Icon(
-                      Icons.auto_stories_rounded,
-                      size: 170,
+                //Application Logo.
+                Center(
+                  child: Container(
+                    height: 230,
+                    width: 230,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
                       color: Colors.teal,
+                      shape: BoxShape.rectangle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-
-                    const Icon(
-                      Icons.auto_stories_rounded,
-                      size: 150,
-                      color: Colors.orange,
-                    ),
-                  ],
+                    child: Image.asset('images/logo.png', fit: BoxFit.contain),
+                  ),
                 ),
 
                 const SizedBox(height: 25),
 
                 const Text(
-                  'Digital Storytelling',
+                  'Your Digital Storytelling Buddy',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 32,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     //color: Colors.white,
                   ),
@@ -116,7 +125,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                 const SizedBox(height: 32),
 
                 const Text(
-                  'Select your Role:',
+                  'Select your role:',
                   style: TextStyle(
                     fontSize: 25,
                     //color: Colors.white,
@@ -128,26 +137,25 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
 
                 Row(
                   children: [
-
-                    //Child Role Button
+                    //Child Mode Card.
                     RoleSelectionCard(
-                        title: 'Child',
-                        subtitle: 'Listen to stories',
-                        icon: Icons.child_care_rounded,
-                        color: Colors.orange,
+                      title: 'Child',
+                      subtitle: 'Listen to stories',
+                      icon: Icons.child_care_rounded,
+                      color: Colors.orange,
                       onTap: () {
+                        //Opens Child List Page.
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ChildHomePage(),
-
-                            ),
-                          );
+                            builder: (context) => ChildListPage(),
+                          ),
+                        );
                       },
-          ),
+                    ),
                     const SizedBox(width: 16),
 
-                    //Parent Role Button
+                    //Parent Mode Card.
                     RoleSelectionCard(
                       title: 'Parent',
                       subtitle: 'Create and Manage',
@@ -157,14 +165,15 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                         final bool isAuthenticated =
                             await authenticateParentMode();
 
+                        //If authentication fails, Parent Mode doesn't open.
                         if (!isAuthenticated) {
                           return;
                         }
+                        //Opens Parent List Page.
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => StoriesListPage(),
-
+                            builder: (context) => ParentListPage(),
                           ),
                         );
                       },

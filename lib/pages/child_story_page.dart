@@ -1,7 +1,10 @@
+//Import Libraries
+import 'dart:io';
+
 //Import Packages
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'dart:io';
+import 'package:page_flip/page_flip.dart';
 
 //My Imports
 import '../models/story.dart';
@@ -16,106 +19,140 @@ class ChildStoryPage extends StatefulWidget {
 }
 
 class _ChildStoryPageState extends State<ChildStoryPage> {
-  //Create audio player
+  //Page audio player.
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  //Variable that shows if audio is playing or not.
-  //It is used to switch between Play and Pause Buttons.
+  //Checks if the current page audio is being played.
+  //It is used to switch between Play and Pause buttons.
   bool isPlaying = false;
 
-  //Total Audio Duration
+  //Stores the current page audio duration.
   Duration duration = Duration.zero;
 
-  //Audio position on Slider
+  //Stores current page audio playback position.
   Duration position = Duration.zero;
 
-  //Controls the swipe pages
-  final PageController _pageController = PageController();
+  //Controls the page flip widget
+  //GlobalKey grants access to PageFlipWidget's state,
+  final GlobalKey<PageFlipWidgetState> _pageFlipController =
+      GlobalKey<PageFlipWidgetState>();
 
-  //Stores the current page index
-  int currentPageIndex = 0;
+  //Stores the current page index.
+  //The first story page has index 0, so the cover page
+  //must have index -1.
+  int currentPageIndex = -1;
 
   //Formats seconds into HH:MM:SS format.
   String formatTime(int seconds) {
     return '${(Duration(seconds: seconds))}'.split('.')[0].padLeft(8, '0');
   }
 
-  //Initialization of Audio Listeners
   @override
   void initState() {
     super.initState();
-    //Audio Listener that detects when audio finishes completely.
+
+    //Initialization of Audio Listeners.
+
+    //Listens for audio state changes (playing, paused).
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() {
+        //If the audio player state is 'playing',
+        //isPlaying becomes true.
+        //Otherwise, isPlaying becomes false.
+        isPlaying = state == PlayerState.playing;
+      });
+    });
+
+    //Listens for changes in the current page audio duration.
+    _audioPlayer.onDurationChanged.listen((newDuration) {
+      //Keeps the longest valid duration as the maximum duration
+      //of the  audio slider.
+      setState(() {
+        duration = newDuration;
+      });
+    });
+
+    //Listens for changes in the current page audio position.
+    _audioPlayer.onPositionChanged.listen((newPosition) {
+      //Updates the current slider position while the audio is being played.
+      setState(() {
+        position = newPosition;
+      });
+    });
+
+    //Listens for when the current page audio finishes completely.
     _audioPlayer.onPlayerComplete.listen((event) {
-      //Stops audio and resets the slider position.
+      //Stops audio, audio button returns to 'Play'
+      //and resets the audio slider position back to the beginning.
       setState(() {
         isPlaying = false;
         position = Duration.zero;
       });
       _audioPlayer.seek(Duration.zero);
     });
-
-    //Listens for audio state changes (playing, paused or stopped.)
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      setState(() {
-        //???Checks if the current audio player is playing.
-        isPlaying = state == PlayerState.playing;
-      });
-    });
-
-    //Audio Listener that detects changes on audio duration
-    _audioPlayer.onDurationChanged.listen((newDuration) {
-      //Keeps the longest valid duration.
-
-      setState(() {
-        duration = newDuration;
-      });
-    });
-
-    //Updates the current slider position
-    //while the audio is being played
-    _audioPlayer.onPositionChanged.listen((newPosition) {
-      setState(() {
-        position = newPosition;
-      });
-    });
   }
 
   //Starts current page's audio.
   Future<void> startPageAudio() async {
-    //Checks if story has no pages.
+    //If there are no pages, the function stops.
     if (widget.story.pages.isEmpty) {
       return;
     }
 
-    //Gets the current page's audio path.
+    //If the current page is the cover page or the 'END' page,
+    //the function stops.
+    if (currentPageIndex < 0 || currentPageIndex >= widget.story.pages.length) {
+      return;
+    }
+
+    //Gets the audio path of the current page.
     final currentPageAudio = widget.story.pages[currentPageIndex].pageAudio;
 
-    //Checks if current page's audio is empty.
-    //If it is empty, the audio stops.
+    //If there is no audio path on the current page,
+    //the function stops.
     if (currentPageAudio.isEmpty) {
       return;
     }
 
-    //Loads and starts current page's audio.
+    //Plays the current page audio from the local device file path.
     await _audioPlayer.play(DeviceFileSource(currentPageAudio));
   }
 
+  //Pauses the current page audio.
   Future<void> pauseAudio() async {
     //Pauses the current audio.
     await _audioPlayer.pause();
   }
 
   //Runs when the user swipes to another page.
-  Future<void> swipePage(int index) async {
+  Future<void> swipePage(int pageNumber) async {
     //Stops the current audio.
     await _audioPlayer.stop();
 
     setState(() {
-      currentPageIndex = index;
+      //If the current page is the cover page or the 'END' page,
+      //there is no audio to play.
+      if (pageNumber <= 0 || pageNumber > widget.story.pages.length) {
+        currentPageIndex = -1;
+      } else {
+        //PageFlipWidget counts the cover page in its page number,
+        //but in widget.story.pages the first story page has index 0,
+        //so we subtract 1 from pageNumber.
+        currentPageIndex = pageNumber - 1;
+      }
+
+      //Stops audio, audio button returns to 'Play'
+      //and resets the audio slider position back to the beginning.
       isPlaying = false;
       duration = Duration.zero;
       position = Duration.zero;
     });
+
+    //If the current page is a real story page (with audio),
+    //starts the audio playback automatically.
+    if (currentPageIndex != -1) {
+      await startPageAudio();
+    }
   }
 
   //Skips audio 10 seconds backwards.
@@ -138,15 +175,135 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
     await _audioPlayer.seek(newPosition > duration ? duration : newPosition);
   }
 
+  //Creates a visual book page for each story page.
+  Widget _buildStoryBookPage(int pageIndex) {
+    //Gets the current story page.
+    final storyPage = widget.story.pages[pageIndex];
+    return Container(
+      //Ads space around the book page.
+      margin: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        //Adds shadow under the page.
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 18,
+            //Shifts shadow by 8 pixels down.
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          //Makes all Stack children fill the container.
+          fit: StackFit.expand,
+          children: [
+            //Story Page Image
+            if (storyPage.pageImage.isNotEmpty)
+              Image.file(File(storyPage.pageImage), fit: BoxFit.cover)
+            else
+              Container(
+                color: Colors.teal.withValues(alpha: 0.08),
+                child: const Icon(
+                  Icons.auto_stories_rounded,
+                  size: 120,
+                  color: Colors.teal,
+                ),
+              ),
+
+            //Page Number.
+            Positioned(
+              right: 20,
+              bottom: 20,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${pageIndex + 1}/${widget.story.pages.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCoverPage() {
+    return Container(
+      margin: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            //Story Page Image
+            if (widget.story.coverImage.isNotEmpty)
+              Image.file(
+                File(widget.story.coverImage),
+                //height: 260,
+                //width: double.infinity,
+                fit: BoxFit.cover,
+              )
+            else
+              Container(
+                color: Colors.teal.withValues(alpha: 0.08),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      widget.story.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.teal,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
-    //Free memory from audio player
+    //Free memory from audio player.
     _audioPlayer.dispose();
 
-    //Free memory from page controller
-    _pageController.dispose();
-
-    //Calls parent class dispose method to complete cleanup
+    //Calls parent dispose method to complete cleanup.
     super.dispose();
   }
 
@@ -154,89 +311,61 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        //Same Background as the Home Page
+        //Same Background as the Home Page.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
 
         title: Text(widget.story.title),
       ),
 
       body: widget.story.pages.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 'This story has no pages.',
-                style: TextStyle(fontSize: 20),
+                style: const TextStyle(fontSize: 20),
               ),
             )
           : Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
                   Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      itemCount: widget.story.pages.length,
-                      onPageChanged: swipePage,
+                    child: PageFlipWidget(
+                      key: _pageFlipController,
 
-                      itemBuilder: (context, index) {
-                        final storyPage = widget.story.pages[index];
+                      //Runs when a page is flipped.
+                      onPageFlipped: swipePage,
 
-                        return Column(
-                          children: [
-                            //Story Page Image
-                            if (storyPage.pageImage.isNotEmpty)
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(35),
-                                child: Image.file(
-                                  File(storyPage.pageImage),
-                                  height: 260,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            else
-                              Container(
-                                height: 260,
-                                //Container takes full width.
-                                width: double.infinity,
+                      //Book background color.
+                      backgroundColor: Colors.brown,
 
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(35),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black,
-                                      blurRadius: 12,
-                                      offset: Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-
-                                child: const Icon(
-                                  Icons.headphones_rounded,
-                                  size: 150,
-                                  color: Colors.teal,
-                                ),
-                              ),
-                            const SizedBox(height: 32),
-                            Text(
-                              widget.story.title,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 34,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      lastPage: Container(
+                        margin: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'The End',
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal,
                             ),
+                          ),
+                        ),
+                      ),
+                      children: <Widget>[
+                        //Book Cover Page.
+                        _buildCoverPage(),
 
-                            const SizedBox(height: 12),
-
-                            Text(
-                              'Page ${index + 1} of ${widget.story.pages.length}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 18),
-                            ),
-                          ],
-                        );
-                      },
+                        for (
+                          int pageIndex = 0;
+                          pageIndex < widget.story.pages.length;
+                          pageIndex++
+                        )
+                          _buildStoryBookPage(pageIndex),
+                      ],
                     ),
                   ),
 
@@ -287,7 +416,9 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
                       IconButton(
                         iconSize: 60,
                         color: Colors.teal,
-                        onPressed: skipBackward,
+                        //If the current page is the cover page or the 'END' page,
+                        //the Skip Backward button is disabled.
+                        onPressed: currentPageIndex == -1 ? null : skipBackward,
                         icon: const Icon(Icons.replay_10_rounded),
                       ),
 
@@ -297,13 +428,19 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
                       IconButton(
                         iconSize: 90,
                         color: Colors.orange,
-                        onPressed: () {
-                          if (isPlaying) {
-                            pauseAudio();
-                          } else {
-                            startPageAudio();
-                          }
-                        },
+
+                        //If the current page is the cover page or the 'END' page,
+                        //the Play button is disabled.
+                        onPressed: currentPageIndex == -1
+                            ? null
+                            : () {
+                                if (isPlaying) {
+                                  pauseAudio();
+                                } else {
+                                  startPageAudio();
+                                }
+                              },
+
                         icon: Icon(
                           //Changes dynamically the button icon between Play and Pause.
                           isPlaying
@@ -318,7 +455,9 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
                       IconButton(
                         iconSize: 60,
                         color: Colors.teal,
-                        onPressed: skipForward,
+                        //If the current page is the cover page or the 'END' page,
+                        //the Skip Forward button is disabled.
+                        onPressed: currentPageIndex == -1 ? null : skipForward,
                         icon: const Icon(Icons.forward_10_rounded),
                       ),
                     ],

@@ -1,6 +1,5 @@
 //Import Packages
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
 
 //Reusable card to separate the page in sections
 class SectionCard extends StatelessWidget{

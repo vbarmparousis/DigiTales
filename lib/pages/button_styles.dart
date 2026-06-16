@@ -1,7 +1,7 @@
 //Import Packages
 import 'package:flutter/material.dart';
 
-//Reusable button styles
+//Reusable button styles class.
 class ButtonStyles {
   //Main teal button style.
   static ButtonStyle tealButton = ElevatedButton.styleFrom(
@@ -74,7 +74,7 @@ class ButtonStyles {
     textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: Colors.teal, width: 1.5),
+      side: const BorderSide(color: Colors.deepPurple, width: 1.5),
     ),
     elevation: 0,
   );

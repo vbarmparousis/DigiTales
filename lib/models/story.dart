@@ -1,57 +1,67 @@
-//Complete Story Class.
+//Custom Class: Story.
+//This class represents a complete digital story.
 class Story {
   final String title;
   final String coverImage;
 
-  //Each story contains multiple pages.
+  //Each story object contains multiple pages.
   final List<StoryPage> pages;
 
-  //Stores Hive Key for correct edit/delete operations
+  //Stores Hive key of the story for correct edit/delete operations.
   final dynamic hiveKey;
 
+  //Story constructor.
   Story({
     required this.title,
     required this.coverImage,
     required this.pages,
-    this.hiveKey,
 
+    //hiveKey is not required because a new story doesn't
+    //have a Hive key before it's saved inside the Hive box.
+    this.hiveKey,
   });
 
-  //Converts a Story object into a Map object
-  //in order to store a story into Hive.
+  //Converts a Story object into a Map object.
+  //
+  //Hive stores simple data type, the custom class Story can't
+  //be stored properly, so it needs to be converted into a
+  //Map first.
   Map<String, dynamic> toMap() {
-    return{
-      'title' : title,
-      'coverImage' : coverImage,
-      'pages' : pages.map((page) => page.toMap()).toList(),
+    return {
+      'title': title,
+      'coverImage': coverImage,
+
+      //Converts every StoryPage object into a Map.
+      //The result is a List of Maps.
+      'pages': pages.map((page) => page.toMap()).toList(),
     };
   }
 
-  //Creates a Story object from a Map
-  //in order to load a story from Hive.
-  factory Story.fromMap(
-      Map<dynamic, dynamic> map, {
-        dynamic hiveKey,
-      }
-    ){
-      return Story(
-        title: map['title'] ?? '',
-        coverImage: map['coverImage'] ?? '',
-        pages: (map['pages'] as List? ?? [])
+  //Converts a Map object back into a Story object.
+
+  //Hive returns stored data as Map-like data.
+  //This Map is converted back into a Story object.
+  factory Story.fromMap(Map<dynamic, dynamic> map, {dynamic hiveKey}) {
+    return Story(
+      title: map['title'] ?? '',
+      coverImage: map['coverImage'] ?? '',
+      pages: (map['pages'] as List? ?? [])
           .map((pageMap) => StoryPage.fromMap(pageMap))
           .toList(),
-        hiveKey: hiveKey,
-      );
-      }
+      hiveKey: hiveKey,
+    );
+  }
 }
 
-//Story Page Class.
+//Custom Class: StoryPage.
+//This class represents one page of a digital story.
 //Each page contains its own image, audio and audio duration.
 class StoryPage {
   final String pageImage;
   final String pageAudio;
   final int pageAudioDuration;
 
+  //StoryPage Constructor.
   StoryPage({
     required this.pageImage,
     required this.pageAudio,
@@ -59,18 +69,20 @@ class StoryPage {
   });
 
   //Converts a StoryPage object into a Map object
-  //in order to store a story page into Hive.
+  //in order to store it inside Hive.
   Map<String, dynamic> toMap() {
     return {
-      'pageImage' : pageImage,
-      'pageAudio' : pageAudio,
-      'pageAudioDuration' : pageAudioDuration,
-  };
+      'pageImage': pageImage,
+      'pageAudio': pageAudio,
+      'pageAudioDuration': pageAudioDuration,
+    };
   }
 
-  //Creates a StoryPage object from a Map
-  //in order to load a story page from Hive.
-  factory StoryPage.fromMap( Map<dynamic, dynamic> map) {
+  //Converts a Map object back into a StoryPage object.
+
+  //Hive returns stored data as Map-like data.
+  //This Map is converted back into a StoryPage object.
+  factory StoryPage.fromMap(Map<dynamic, dynamic> map) {
     return StoryPage(
       pageImage: map['pageImage'] ?? '',
       pageAudio: map['pageAudio'] ?? '',
