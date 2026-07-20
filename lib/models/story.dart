@@ -7,6 +7,8 @@ class Story {
   //Each story object contains multiple pages.
   final List<StoryPage> pages;
 
+  final String backgroundMusic;
+
   //Stores Hive key of the story for correct edit/delete operations.
   final dynamic hiveKey;
 
@@ -15,6 +17,9 @@ class Story {
     required this.title,
     required this.coverImage,
     required this.pages,
+
+    //Background music is optional.
+    this.backgroundMusic = '',
 
     //hiveKey is not required because a new story doesn't
     //have a Hive key before it's saved inside the Hive box.
@@ -30,6 +35,7 @@ class Story {
     return {
       'title': title,
       'coverImage': coverImage,
+      'backgroundMusic': backgroundMusic,
 
       //Converts every StoryPage object into a Map.
       //The result is a List of Maps.
@@ -45,6 +51,7 @@ class Story {
     return Story(
       title: map['title'] ?? '',
       coverImage: map['coverImage'] ?? '',
+      backgroundMusic: map['backgroundMusic'] ?? '',
       pages: (map['pages'] as List? ?? [])
           .map((pageMap) => StoryPage.fromMap(pageMap))
           .toList(),

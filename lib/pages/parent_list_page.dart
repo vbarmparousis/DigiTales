@@ -4,6 +4,7 @@ import 'dart:io';
 //Import Packages
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 
 //My Imports
 import '../models/story.dart';
@@ -45,6 +46,42 @@ class _ParentListPageState extends State<ParentListPage> {
       totalDuration += page.pageAudioDuration;
     }
     return totalDuration;
+  }
+
+  //Deletes a local file inside the app's document directory.
+  Future<void> deleteLocalAppStoryFiles(String filePath) async {
+    //If there is no file path, the function stops.
+    if (filePath.isEmpty) {
+      return;
+    }
+
+    //Gets the app's private documents directory.
+    final appDirectory = await getApplicationDocumentsDirectory();
+
+    //Checks if the file is inside the app's document directory.
+    //If not, the function stops.
+    if (!filePath.startsWith(appDirectory.path)) {
+      return;
+    }
+
+    final file = File(filePath);
+
+    //Deletes the file only if it exists.
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  //Deletes all local files of a deleted story.
+  Future<void> deleteStoryFile(Story story) async {
+    //Deletes the story cover image.
+    await deleteLocalAppStoryFiles(story.coverImage);
+
+    //Deletes every page image and audio.
+    for (final page in story.pages) {
+      await deleteLocalAppStoryFiles(page.pageImage);
+      await deleteLocalAppStoryFiles(page.pageAudio);
+    }
   }
 
   @override
@@ -283,13 +320,20 @@ class _ParentListPageState extends State<ParentListPage> {
                                 ),
                               );
                               //If Story Deletion is selected,
-                              // it removes the story from the list
+                              // it removes the story from the list,
                               //and rebuilds the Stories List Page.
                               if (deleteOrEdit != null) {
                                 if (deleteOrEdit == 'delete') {
-                                  setState(() {
-                                    storyBox.delete(story.hiveKey);
-                                  });
+
+                                  //Deletes story's local image and audio files.
+                                  await deleteStoryFile(story);
+
+                                  //Deletes the story data from Hive.
+                                  await storyBox.delete(story.hiveKey);
+
+                                  //Rebuilds stories list.
+                                  setState(() {});
+
                                 } else if (deleteOrEdit is Story) {
                                   setState(() {
                                     storyBox.put(

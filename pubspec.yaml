@@ -70,6 +70,7 @@ flutter:
 
   assets:
     - images/logo.png
+    - assets/background_music/
 
   fonts:
     - family: Nunito

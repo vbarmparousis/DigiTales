@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 
 //My Imports
 import '../models/story.dart';
+import '../models/background_music.dart';
 import 'button_styles.dart';
 import '../widgets/recording_bottom_sheet.dart';
 import '../widgets/section_card.dart';
@@ -33,6 +35,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
   //Stores the local file path of the selected cover image.
   String coverImagePath = '';
 
+  //Stores the selected background music.
+  String selectedBackgroundMusic = '';
+
   //Stores the local file path of the selected page image.
   String pageImagePath = '';
 
@@ -51,12 +56,22 @@ class _EditStoryPageState extends State<EditStoryPage> {
   //Page preview audio player.
   final AudioPlayer pagePreviewAudioPlayer = AudioPlayer();
 
+  //Background music audio player.
+  final AudioPlayer backgroundMusicAudioPlayer = AudioPlayer();
+
+  //Stores the audio setup Future. It is used so the application can
+  //wait until both players are ready to play together.
+  late final Future<void> audioSetupFuture;
+
   //Stores the selected page index.
   int selectedPageIndex = 0;
 
   //Checks if the selected page audio is being played.
   //It is used to switch between Play and Pause buttons.
   bool isPreviewPlaying = false;
+
+  //Checks if the preview audio is paused.
+  bool isPreviewPaused = false;
 
   //Stores the selected page audio duration.
   Duration previewDuration = Duration.zero;
@@ -77,16 +92,52 @@ class _EditStoryPageState extends State<EditStoryPage> {
         '${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
+  //Sets the audio for both audio players.
+  //This allows preview page audio and background music to play
+  //at the same time instead of interrupting each other.
+  Future<void> setupAudioPlayers() async {
+    //Creates an audio context that allows multiple
+    //audio players to mix their sounds.
+    final audioContext = AudioContextConfig(
+      focus: AudioContextConfigFocus.mixWithOthers,
+    ).build();
+
+    //Applies the audio context to the preview page audio player
+    //and background music audio player.
+    await pagePreviewAudioPlayer.setAudioContext(audioContext);
+    await backgroundMusicAudioPlayer.setAudioContext(audioContext);
+  }
+
   //Runs once when the Page is first created.
   @override
   void initState() {
     super.initState();
+
+    //Sets up preview page audio player and background music
+    // audio player so they can play simultaneously.
+    //The result is stored in to audioSetupFuture so playPreviewAudio()
+    //can wait for the setup to finish.
+    audioSetupFuture = setupAudioPlayers();
 
     //Loads the existing story title into the TextField.
     _titleController.text = widget.story.title;
 
     //Loads the existing cover image.
     coverImagePath = widget.story.coverImage;
+
+    //Checks if the selected background music exist inside the list.
+    bool backgroundMusicExists = backgroundMusicList.any(
+      (backgroundMusic) =>
+          backgroundMusic.musicPath == widget.story.backgroundMusic,
+    );
+
+    //Loads the existing background music.
+    //If the story has no background music or if the background
+    //music doesn't exist on the list, the dropdown uses the
+    //'No background music' option.
+    selectedBackgroundMusic = backgroundMusicExists
+        ? widget.story.backgroundMusic
+        : '';
 
     //Loads the existing story pages in order to create
     //a local editable copy of the pages list.
@@ -122,15 +173,47 @@ class _EditStoryPageState extends State<EditStoryPage> {
     });
 
     //Listens for when the selected page audio finishes completely.
-    pagePreviewAudioPlayer.onPlayerComplete.listen((event) {
-      //Stops audio, audio button returns to 'Play'
-      //and resets the audio slider position back to the beginning.
+    pagePreviewAudioPlayer.onPlayerComplete.listen((event) async {
+      //Stops background music when the page audio finishes completely.
+      await backgroundMusicAudioPlayer.stop();
+
+      //Resets the audio slider position back to the beginning.
+      await pagePreviewAudioPlayer.seek(Duration.zero);
+
+      //Stops page audio and background music audio,
+      //audio button returns to 'Play'.
       setState(() {
         isPreviewPlaying = false;
+        isPreviewPaused = false;
         previewPosition = Duration.zero;
       });
-      pagePreviewAudioPlayer.seek(Duration.zero);
     });
+  }
+
+  //Copies the selected image into the app's local document folder.
+  //This prevents image paths from breaking when Android clears temporary files.
+  Future<String> copyImageToAppFolder(String originalImagePath) async {
+    //Gets app's local document directory.
+    final appDirectory = await getApplicationDocumentsDirectory();
+
+    //Formats date time for the copied image's name.
+    final dateTime = DateTime.now()
+        .toString()
+        .replaceAll(':', '_')
+        .replaceAll(' ', '_');
+
+    //Keeps the original image file extension.
+    final extension = originalImagePath.split('.').last;
+
+    //Creates a new permanent image path.
+    final newImagePath =
+        '${appDirectory.path}/story_image_$dateTime.$extension';
+
+    //Copies the image into the app folder.
+    final copiedImage = await File(originalImagePath).copy(newImagePath);
+
+    //Returns the new image path.
+    return copiedImage.path;
   }
 
   //Opens device gallery and allows the
@@ -149,10 +232,14 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
+    //Copies the selected image into the app's local document folder
+    //and stores the new path of the copied image.
+    final copiedImagePath = await copyImageToAppFolder(selectedImage.path);
+
     //Stores the selected image file path and updates the UI in order
     //to show the selected cover image.
     setState(() {
-      coverImagePath = selectedImage.path;
+      coverImagePath = copiedImagePath;
     });
   }
 
@@ -172,10 +259,14 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
-    //Stores the selected image file path and updates the UI in order
+    //Copies the selected image into the app's local document folder
+    //and stores the new path of the copied image.
+    final copiedImagePath = await copyImageToAppFolder(selectedImage.path);
+
+    //Stores the copied image file path and updates the UI in order
     //to show the selected page image.
     setState(() {
-      pageImagePath = selectedImage.path;
+      pageImagePath = copiedImagePath;
     });
   }
 
@@ -252,29 +343,97 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
+    //Waits until both audio players are ready to play together.
+    await audioSetupFuture;
+
+    //If the preview page audio was paused before,
+    //resume the preview page audio and the background music.
+    if (isPreviewPaused) {
+      //Resumes the preview page audio from the paused position.
+      await pagePreviewAudioPlayer.resume();
+
+      //If a background music has been selected,
+      //resumes the background music audio from the paused position.
+      if (selectedBackgroundMusic.isNotEmpty) {
+        await backgroundMusicAudioPlayer.resume();
+      }
+
+      //Resets isPreviewPaused because the preview audio is no longer paused.
+      setState(() {
+        isPreviewPaused = false;
+      });
+
+      return;
+    }
+
+    //Stops any preview audio that may already be playing.
+    await stopAllPreviewAudio();
+
     //Plays the selected page audio from the local device file path.
     await pagePreviewAudioPlayer.play(DeviceFileSource(selectedPageAudio));
+
+    //If a background music has been selected, it starts playing behind
+    //the preview page audio.
+    if (selectedBackgroundMusic.isNotEmpty) {
+      //Makes the background music loop while the recording is playing.
+      await backgroundMusicAudioPlayer.setReleaseMode(ReleaseMode.loop);
+
+      //Lowers the volume of background music.
+      await backgroundMusicAudioPlayer.setVolume(0.025);
+
+      //Plays the selected background music from assets.
+      await backgroundMusicAudioPlayer.play(
+        AssetSource(selectedBackgroundMusic),
+      );
+    }
   }
 
   //Pauses the selected preview page audio.
+  //If there is a selected background music audio, it pauses too.
   Future<void> pausePreviewAudio() async {
     //Pauses the current playback and keeps the current position,
     //so if the user presses play again, the audio continues from
     //the point it stopped.
     await pagePreviewAudioPlayer.pause();
+
+    //If a background music has been selected,
+    //pauses the background music audio and keeps its current position.
+    if (selectedBackgroundMusic.isNotEmpty) {
+      await backgroundMusicAudioPlayer.pause();
+    }
+
+    //Sets the audio as paused.
+    setState(() {
+      isPreviewPaused = true;
+    });
+  }
+
+  //Stops both the preview page audio and the background music audio.
+  Future<void> stopAllPreviewAudio() async {
+    //Stops the selected preview page audio.
+    await pagePreviewAudioPlayer.stop();
+
+    //Stops the background music audio.
+    await backgroundMusicAudioPlayer.stop();
+
+    //Resets the preview page audio UI.
+    setState(() {
+      isPreviewPlaying = false;
+      isPreviewPaused = false;
+      previewPosition = Duration.zero;
+    });
   }
 
   //Changes the preview page on carousel everytime the user swipes
   //left or right.
   Future<void> changePreviewPage(int index) async {
     //Stops any preview audio that may already be playing.
-    await pagePreviewAudioPlayer.stop();
+    await stopAllPreviewAudio();
 
     //Updates the UI by showing the next/previous story and resetting
     //the audio parameters.
     setState(() {
       selectedPageIndex = index;
-      isPreviewPlaying = false;
       previewDuration = Duration.zero;
       previewPosition = Duration.zero;
     });
@@ -328,6 +487,10 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
+    //Copies the selected image into the app's local document folder
+    //and stores the new path of the copied image.
+    final copiedImagePath = await copyImageToAppFolder(selectedImage.path);
+
     //Updates the selected page image.
     setState(() {
       //Stores the old selected StoryPage before replacing it.
@@ -340,7 +503,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
       //Replaces the selected StoryPage with a new StoryPage object.
       pages[selectedPageIndex] = StoryPage(
         //New selected image.
-        pageImage: selectedImage.path,
+        pageImage: copiedImagePath,
 
         //Keeps the old audio and audio duration.
         pageAudio: oldPage.pageAudio,
@@ -365,8 +528,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
-    //Stops any preview audio that may already be playing.
-    await pagePreviewAudioPlayer.stop();
+    //Stops any preview audio that may already be playing
+    //before changing the preview page audio.
+    await stopAllPreviewAudio();
 
     //Updates the selected page audio and audio duration.
     setState(() {
@@ -386,7 +550,6 @@ class _EditStoryPageState extends State<EditStoryPage> {
       );
 
       //Resets preview audio parameters.
-      isPreviewPlaying = false;
       previewDuration = Duration.zero;
       previewPosition = Duration.zero;
     });
@@ -432,8 +595,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
-    //Stops any preview audio that may already be playing.
-    await pagePreviewAudioPlayer.stop();
+    //Stops any preview audio that may already be playing
+    //before deleting the selected page.
+    await stopAllPreviewAudio();
 
     //Updates the page list and the UI.
     setState(() {
@@ -451,7 +615,6 @@ class _EditStoryPageState extends State<EditStoryPage> {
       }
 
       //Resets preview audio parameters.
-      isPreviewPlaying = false;
       previewDuration = Duration.zero;
       previewPosition = Duration.zero;
     });
@@ -464,8 +627,10 @@ class _EditStoryPageState extends State<EditStoryPage> {
     _titleController.dispose();
     //Disposes the page controller used by the preview carousel.
     pagePreviewController.dispose();
-    //Disposes the audio controller used by the preview carousel.
+    //Disposes the audio player used by the preview carousel.
     pagePreviewAudioPlayer.dispose();
+    //Disposes the background music audio player used by the preview carousel.
+    backgroundMusicAudioPlayer.dispose();
     //Calls the parent dispose method to complete the cleanup.
     super.dispose();
   }
@@ -724,7 +889,57 @@ class _EditStoryPageState extends State<EditStoryPage> {
                 ],
               ),
 
-              //3. Section Card: Preview Carousel.
+              //3. Section Card: Background Music.
+              SectionCard(
+                title: 'Background Music',
+                icon: Icons.music_note_rounded,
+                children: [
+                  const SizedBox(height: 5),
+                  //Background Music Dropdown.
+                  DropdownButtonFormField<String>(
+                    //Selected background music path.
+                    initialValue: selectedBackgroundMusic,
+
+                    decoration: InputDecoration(
+                      //labelText: 'Background Music',
+                      labelStyle: const TextStyle(
+                        color: Colors.teal,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+
+                    items: backgroundMusicList.map((backgroundMusic) {
+                      return DropdownMenuItem<String>(
+                        value: backgroundMusic.musicPath,
+
+                        //The title that is being displayed inside the dropdown
+                        child: Text(backgroundMusic.title),
+                      );
+                    }).toList(),
+
+                    onChanged: (value) async {
+                      //If no value is selected, the function stops.
+                      if (value == null) {
+                        return;
+                      }
+
+                      //Stops any preview audio that may already be playing.
+                      await stopAllPreviewAudio();
+
+                      //Stores  the selected background music path.
+                      setState(() {
+                        selectedBackgroundMusic = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+
+              //4. Section Card: Preview Carousel.
 
               //Shows the selection card if there is at least
               //one page added to the story.
@@ -1089,7 +1304,6 @@ class _EditStoryPageState extends State<EditStoryPage> {
                       ),
                     );
                   } else {
-
                     //Shows update confirmation dialog
                     //to prevent page updates by mistake.
                     final bool? confirmUpdateStory = await showDialog<bool>(
@@ -1097,7 +1311,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
                       builder: (context) => AlertDialog(
                         backgroundColor: Colors.white,
                         title: Text('Update Story'),
-                        content: Text('Are you sure you want to update this story?'),
+                        content: Text(
+                          'Are you sure you want to update this story?',
+                        ),
                         actions: [
                           //Cancel Button.
                           TextButton(
@@ -1112,7 +1328,10 @@ class _EditStoryPageState extends State<EditStoryPage> {
                             onPressed: () {
                               Navigator.pop(context, true);
                             },
-                            child: Text('Update', style: TextStyle(color: Colors.teal)),
+                            child: Text(
+                              'Update',
+                              style: TextStyle(color: Colors.teal),
+                            ),
                           ),
                         ],
                       ),
@@ -1128,7 +1347,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                       title: storyTitle,
                       coverImage: coverImagePath,
                       pages: pages,
-
+                      backgroundMusic: selectedBackgroundMusic,
                       //Keeps the same Hive key as the original story.
                       hiveKey: widget.story.hiveKey,
                     );
@@ -1136,7 +1355,6 @@ class _EditStoryPageState extends State<EditStoryPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Story Updated: $storyTitle')),
                     );
-
 
                     //Closes the page and returns the newly created
                     //story to the previous page.
