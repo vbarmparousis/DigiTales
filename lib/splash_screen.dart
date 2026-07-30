@@ -59,26 +59,23 @@ class _SplashScreenState
           //Centers widgets vertically.
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-          Container(
-          height: 230,
-          width: 230,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.teal,
-            shape: BoxShape.rectangle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.8),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
+            Container(
+              height: 230,
+              width: 230,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.teal,
+                shape: BoxShape.rectangle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Image.asset(
-            'images/logo.png',
-            fit: BoxFit.contain,
-          ),
-        ),
+              child: Image.asset('images/logo.png', fit: BoxFit.contain),
+            ),
             const SizedBox(height: 25),
             const Text(
               'Digital Storytelling',

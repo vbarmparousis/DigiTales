@@ -56,7 +56,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Parent Mode requires device authentication. Please set up a screen lock to continue',
+            'Parent Mode requires device authentication.',
           ),
         ),
       );
