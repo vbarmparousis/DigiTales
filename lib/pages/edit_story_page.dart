@@ -10,6 +10,7 @@ import '../models/story.dart';
 import '../models/background_music.dart';
 import 'button_styles.dart';
 import '../widgets/recording_bottom_sheet.dart';
+import '../widgets/image_source_bottom_sheet.dart';
 import '../widgets/section_card.dart';
 
 class EditStoryPage extends StatefulWidget {
@@ -29,7 +30,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
   //Controls the story title TextField
   final TextEditingController _titleController = TextEditingController();
 
-  //Allows to pick images from device gallery.
+  //Allows to pick images from device gallery or camera.
   final ImagePicker imagePicker = ImagePicker();
 
   //Stores the local file path of the selected cover image.
@@ -216,15 +217,31 @@ class _EditStoryPageState extends State<EditStoryPage> {
     return copiedImage.path;
   }
 
-  //Opens device gallery and allows the
+  //Opens image source bottom sheet and allows the
   //user to pick a cover image for the story.
   Future<void> pickCoverImage() async {
-    //Opens device gallery and waits for the user to pick a cover image.
+    //Opens image source bottom sheet and waits for user
+    //to choose between gallery image and camera photo.
+    final ImageSource? selectedImageSource = await showImageSourceBottomSheet(
+      context,
+    );
 
-    //The '?' in XFile is for when the user closes the device gallery
+    //If the image source selection is canceled, the function stops.
+    if (selectedImageSource == null) {
+      return;
+    }
+
+    //Opens gallery or camera depending on user's choice.
+
+    //The '?' in XFile is for when the user closes the device gallery or camera
     //without picking a cover image. (Nullable)
     final XFile? selectedImage = await imagePicker.pickImage(
-      source: ImageSource.gallery,
+      source: selectedImageSource,
+      //Prevents very large camera photos from causing delays
+      //during the page flip animation.
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
     );
 
     //If the image selection is canceled, the function stops.
@@ -243,15 +260,32 @@ class _EditStoryPageState extends State<EditStoryPage> {
     });
   }
 
-  //Opens device gallery and allows the
+  //Opens image source bottom sheet and allows the
   //user to pick an image for the current page of the story.
   Future<void> pickPageImage() async {
-    //Opens device gallery and waits for the user to pick a page image.
+    //Opens image source bottom sheet and waits for user
+    //to choose between gallery image and camera photo.
+    final ImageSource? selectedImageSource = await showImageSourceBottomSheet(
+      context,
+    );
 
-    //The '?' in XFile is for when the user closes the device gallery
+    //If the image source selection is canceled, the function stops.
+    if (selectedImageSource == null) {
+      return;
+    }
+
+    //Opens gallery or camera depending on user's choice.
+
+    //The '?' in XFile is for when the user closes device gallery or camera
     //without picking a page image. (Nullable)
     final XFile? selectedImage = await imagePicker.pickImage(
-      source: ImageSource.gallery,
+      source: selectedImageSource,
+
+      //Prevents very large camera photos from causing delays
+      //during the page flip animation.
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
     );
 
     //If the image selection is canceled, the function stops.
@@ -474,19 +508,35 @@ class _EditStoryPageState extends State<EditStoryPage> {
       return;
     }
 
-    //Opens device gallery and waits for the user to pick a new page image.
+    //Opens image source bottom sheet and waits for user
+    //to choose between gallery image and camera photo.
+    final ImageSource? selectedImageSource = await showImageSourceBottomSheet(
+      context,
+    );
 
-    //The '?' in XFile is for when the user closes the device gallery
+    //If the image source selection is canceled, the function stops.
+    if (selectedImageSource == null) {
+      return;
+    }
+
+    //Opens gallery or camera depending on user's choice.
+
+    //The '?' in XFile is for when the user closes the device gallery or camera
     //without picking a new page image. (Nullable)
     final XFile? selectedImage = await imagePicker.pickImage(
-      source: ImageSource.gallery,
+      source: selectedImageSource,
+
+      //Prevents very large camera photos from causing delays
+      //during the page flip animation.
+      maxWidth: 1920,
+      maxHeight: 1920,
+      imageQuality: 85,
     );
 
     //If the image selection is canceled, the function stops.
     if (selectedImage == null) {
       return;
     }
-
     //Copies the selected image into the app's local document folder
     //and stores the new path of the copied image.
     final copiedImagePath = await copyImageToAppFolder(selectedImage.path);
