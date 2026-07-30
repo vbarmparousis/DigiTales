@@ -12,6 +12,65 @@ import 'child_story_page.dart';
 class ChildListPage extends StatelessWidget {
   const ChildListPage({super.key});
 
+  //Calculates a suitable decoding width for the story pages.
+  int calculateStoryImageCacheWidth(BuildContext context) {
+    final MediaQueryData mediaQuery = MediaQuery.of(context);
+
+    //Converts the screen width from logical pixels to physical pixels
+    final int physicalScreenWidth =
+        (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+
+    return physicalScreenWidth.clamp(1200, 2048).toInt();
+  }
+
+  //Creates the same resized provider for displaying and precaching images.
+  ImageProvider<Object> getStoryImageProvider(
+    BuildContext context,
+    String imagePath,
+  ) {
+    return ResizeImage.resizeIfNeeded(
+      calculateStoryImageCacheWidth(context),
+      null,
+      FileImage(File(imagePath)),
+    );
+  }
+
+  //Precaches a small group of images.
+  //This helps prevent white flashing when a page image is shown
+  //for the first time during the page flip animation.
+  Future<void> precacheStoryImagesBeforeOpening(
+    BuildContext context,
+    Story story,
+  ) async {
+    final List<String> imagePaths = [
+      if (story.coverImage.isNotEmpty) story.coverImage,
+      if (story.pages.isNotEmpty) story.pages[0].pageImage,
+      if (story.pages.length > 1) story.pages[1].pageImage,
+    ];
+
+    //Removes duplicate and empty paths.
+    final Set<String> validPaths = imagePaths
+        .where((imagePath) => imagePath.isNotEmpty)
+        .toSet();
+
+    for (final imagePath in validPaths) {
+      if (!context.mounted) {
+        return;
+      }
+
+      final imageFile = File(imagePath);
+
+      if (!imageFile.existsSync()) {
+        continue;
+      }
+      try {
+        await precacheImage(getStoryImageProvider(context, imagePath), context);
+      } catch (_) {
+        //The story can still open if an image can't be decoded.
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     //Grants access to Hive Story Box
@@ -19,7 +78,7 @@ class ChildListPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Story Time'),
+        title: const Text('Library'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
@@ -83,13 +142,22 @@ class ChildListPage extends StatelessWidget {
 
                         //Inkwell makes the whole story card tappable.
                         return InkWell(
-
                           //Tap effect follows rounder card corners.
                           borderRadius: BorderRadius.circular(25),
 
                           //Opens selected story and sends the Story
                           //object to the ChildStoryPage.
-                          onTap: () {
+                          onTap: () async {
+                            //Prepares the cover and first pages before opening ChildStoryPage.
+                            await precacheStoryImagesBeforeOpening(
+                              context,
+                              story,
+                            );
+
+                            if (!context.mounted) {
+                              return;
+                            }
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -132,6 +200,43 @@ class ChildListPage extends StatelessWidget {
                                       ? Image.file(
                                           File(story.coverImage),
                                           fit: BoxFit.cover,
+
+                                          //The library card needs a thumbnail-sized image.
+                                          cacheWidth: 700,
+
+                                          //Keeps the image stable during rebuilds.
+                                          gaplessPlayback: true,
+
+                                          filterQuality: FilterQuality.medium,
+
+                                          //Shows a placeholder instead of
+                                          //a white flash while the image is decoded.
+                                          frameBuilder:
+                                              (
+                                                context,
+                                                child,
+                                                frame,
+                                                wasSynchronouslyLoaded,
+                                              ) {
+                                                if (wasSynchronouslyLoaded ||
+                                                    frame != null) {
+                                                  return child;
+                                                }
+
+                                                return Container(
+                                                  color: Colors.teal.withValues(
+                                                    alpha: 0.10,
+                                                  ),
+                                                  child: const Center(
+                                                    child: Icon(
+                                                      Icons
+                                                          .auto_stories_rounded,
+                                                      size: 70,
+                                                      color: Colors.teal,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                         )
                                       : Container(
                                           color: Colors.teal.withValues(
