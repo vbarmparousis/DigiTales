@@ -5,12 +5,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 //My Imports
 import '../models/story.dart';
-import 'story_details_page.dart';
+import 'child_story_page.dart';
 import 'story_creation_page.dart';
+import '../services/story_export.dart';
+import '../services/story_import.dart';
 import 'edit_story_page.dart';
+
+//Popup menu actions of each story.
+enum StoryMenuAction { edit, export, delete }
 
 //Stateful Widget rebuilds the screen
 //changes with setstate((){});
@@ -84,6 +90,212 @@ class _ParentListPageState extends State<ParentListPage> {
     }
   }
 
+  //Exports a story as a zip file and opens device share menu.
+  Future<void> exportStory(Story story) async {
+    try {
+      //Creates the exported zip file.
+      final zipFile = await StoryExport.exportStoryToZip(story);
+
+      //Opens the device share menu.
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(zipFile.path)],
+          text: 'DigiTales story backup: ${story.title}',
+        ),
+      );
+    } catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story export failed.')));
+    }
+  }
+
+  //Opens EditStoryPage.
+  Future<void> editStory({required Story story, required Box storyBox}) async {
+    //Opens EditStoryPage and waits for the updated story.
+    final Story? updatedStory = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => EditStoryPage(story: story)),
+    );
+
+    //If the story update is canceled, the function stops.
+    if (updatedStory == null) {
+      return;
+    }
+
+    //Updates the story inside Hive.
+    await storyBox.put(story.hiveKey, updatedStory.toMap());
+
+    //Rebuilds the stories list.
+    setState(() {});
+  }
+
+  //Shows a confirmation dialog before deleting a story.
+  Future<void> deleteStory({
+    required Story story,
+    required Box storyBox,
+  }) async {
+    //Displays delete confirmation dialog.
+    final bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Delete Story'),
+        content: Text(
+          'Are you sure you want to delete the story: "${story.title}"?',
+        ),
+        actions: [
+          //Cancel deletion button.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, false);
+            },
+            child: Text('Cancel'),
+          ),
+
+          //Confirm deletion button.
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, true);
+            },
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    //If the story deletion is canceled, the function stops.
+    if (confirmDelete != true) {
+      return;
+    }
+
+    //Deletes story's images and audio files from local storage.
+    await deleteStoryFile(story);
+
+    //Deletes story from Hive.
+    await storyBox.delete(story.hiveKey);
+
+    //Rebuilds the stories list.
+    setState(() {});
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Story deleted.')));
+  }
+
+  //Opens Story Creation Page and save the new story into Hive.
+  Future<void> createStory({required Box storyBox}) async {
+    //Opens the Story Creation Page and waits for a new story
+    //Navigator.push returns the story title when Story Creation Page closes.
+    final Story? newStory = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const StoryCreationPage()),
+    );
+
+    //If story creation is canceled, the function stops.
+    if (newStory == null) {
+      return;
+    }
+
+    //Stores the new story inside Hive.
+    await storyBox.add(newStory.toMap());
+
+    //Rebuilds UI after adding the new story.
+    setState(() {});
+
+    //Shows confirmation message.
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Story created.')));
+  }
+
+  Future<void> importStory({required Box storyBox}) async {
+    try {
+      //Opens file picker and imports the selected zip file as a Story object.
+      final Story? importedStory = await StoryImport.importStoryFromZip();
+
+      //If file selection is canceled, the function stops.
+      if (importedStory == null) {
+        return;
+      }
+
+      //Saves the imported story inside Hive.
+      await storyBox.add(importedStory.toMap());
+
+      //Rebuilds UI after importing the story.
+      setState(() {});
+
+      //Shows confirmation message.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story imported.')));
+    } catch (error) {
+      //Shows error message if import fails.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Story import failed.')));
+    }
+  }
+
+  //Calculates a suitable decoding width for the story pages.
+  int calculateStoryImageCacheWidth(BuildContext context) {
+    final MediaQueryData mediaQuery = MediaQuery.of(context);
+
+    //Converts the screen width from logical pixels to physical pixels
+    final int physicalScreenWidth =
+        (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+
+    return physicalScreenWidth.clamp(1200, 2048).toInt();
+  }
+
+  //Creates the same resized provider for displaying and precaching images.
+  ImageProvider<Object> getStoryImageProvider(
+    BuildContext context,
+    String imagePath,
+  ) {
+    return ResizeImage.resizeIfNeeded(
+      calculateStoryImageCacheWidth(context),
+      null,
+      FileImage(File(imagePath)),
+    );
+  }
+
+  //Precaches a small group of images.
+  //This helps prevent white flashing when a page image is shown
+  //for the first time during the page flip animation.
+  Future<void> precacheStoryImagesBeforeOpening(
+    BuildContext context,
+    Story story,
+  ) async {
+    final List<String> imagePaths = [
+      if (story.coverImage.isNotEmpty) story.coverImage,
+      if (story.pages.isNotEmpty) story.pages[0].pageImage,
+      if (story.pages.length > 1) story.pages[1].pageImage,
+    ];
+
+    //Removes duplicate and empty paths.
+    final Set<String> validPaths = imagePaths
+        .where((imagePath) => imagePath.isNotEmpty)
+        .toSet();
+
+    for (final imagePath in validPaths) {
+      if (!context.mounted) {
+        return;
+      }
+
+      final imageFile = File(imagePath);
+
+      if (!imageFile.existsSync()) {
+        continue;
+      }
+      try {
+        await precacheImage(getStoryImageProvider(context, imagePath), context);
+      } catch (_) {
+        //The story can still open if an image can't be decoded.
+      }
+    }
+  }
+
   @override
   void dispose() {
     //Free memory from search controller.
@@ -140,29 +352,52 @@ class _ParentListPageState extends State<ParentListPage> {
         title: const Text('Library'),
       ),
 
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Create Story'),
-        onPressed: () async {
-          //Opens the Story Creation Page and waits for a new story
-          //Navigator.push returns the story title when Story Creation Page closes.
-          final Story? newStory = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const StoryCreationPage()),
-          );
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              //Create Story Button.
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Create Story'),
+                  onPressed: () async {
+                    await createStory(storyBox: storyBox);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
 
-          //Checks if there is any new stories.
-          // If there is a new story it is stored inside Hive.
-          if (newStory != null) {
-            //Stores the new story inside Hive.
-            await storyBox.add(newStory.toMap());
-
-            //Rebuilds UI after adding the new story inside Hive
-            setState(() {});
-          }
-        },
+              //Import Story Button.
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 56),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  icon: const Icon(Icons.file_upload_rounded),
+                  label: const Text('Import Story'),
+                  onPressed: () async {
+                    await importStory(storyBox: storyBox);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
 
       body: Padding(
@@ -270,6 +505,44 @@ class _ParentListPageState extends State<ParentListPage> {
                                       height: 60,
                                       width: 60,
                                       fit: BoxFit.cover,
+
+                                      //The library card needs a thumbnail-sized image.
+                                      cacheWidth: 300,
+
+                                      //Keeps the image stable during rebuilds.
+                                      gaplessPlayback: true,
+
+                                      filterQuality: FilterQuality.medium,
+
+                                      //Shows a placeholder instead of
+                                      //a white flash while the image is decoded.
+                                      frameBuilder:
+                                          (
+                                            context,
+                                            child,
+                                            frame,
+                                            wasSynchronouslyLoaded,
+                                          ) {
+                                            if (wasSynchronouslyLoaded ||
+                                                frame != null) {
+                                              return child;
+                                            }
+
+                                            return Container(
+                                              height: 60,
+                                              width: 60,
+                                              color: Colors.teal.withValues(
+                                                alpha: 0.10,
+                                              ),
+                                              child: const Center(
+                                                child: Icon(
+                                                  Icons.auto_stories_rounded,
+                                                  size: 32,
+                                                  color: Colors.teal,
+                                                ),
+                                              ),
+                                            );
+                                          },
                                     ),
                                   )
                                 : const Icon(Icons.book_rounded),
@@ -309,40 +582,93 @@ class _ParentListPageState extends State<ParentListPage> {
                               ],
                             ),
 
+                            //Three dot menu with the available story actions.
+                            trailing: PopupMenuButton<StoryMenuAction>(
+                              icon: const Icon(Icons.more_vert_rounded),
+
+                              //Runs when an action is selected from the menu.
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case StoryMenuAction.edit:
+                                    await editStory(
+                                      story: story,
+                                      storyBox: storyBox,
+                                    );
+                                    break;
+                                  case StoryMenuAction.export:
+                                    await exportStory(story);
+                                    break;
+
+                                  case StoryMenuAction.delete:
+                                    await deleteStory(
+                                      story: story,
+                                      storyBox: storyBox,
+                                    );
+                                    break;
+                                }
+                              },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: StoryMenuAction.edit,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.edit_rounded,
+                                        color: Colors.teal,
+                                      ),
+                                      SizedBox(width: 12),
+                                      Text('Edit'),
+                                    ],
+                                  ),
+                                ),
+
+                                PopupMenuItem(
+                                  value: StoryMenuAction.export,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.ios_share_rounded,
+                                        color: Colors.teal,
+                                      ),
+                                      SizedBox(width: 12),
+                                      Text('Export'),
+                                    ],
+                                  ),
+                                ),
+
+                                PopupMenuItem(
+                                  value: StoryMenuAction.delete,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete_rounded,
+                                        color: Colors.red,
+                                      ),
+                                      SizedBox(width: 12),
+                                      Text('Delete'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
                             onTap: () async {
-                              //Opens the Story Details Page for a chosen story
-                              //Waits for the Delete Story or Edit Story Answer.
-                              var deleteOrEdit = await Navigator.push(
+                              //Prepares the cover and first pages before opening ChildStoryPage.
+                              await precacheStoryImagesBeforeOpening(
+                                context,
+                                story,
+                              );
+
+                              if (!context.mounted) {
+                                return;
+                              }
+                              Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      StoryDetailsPage(story: story),
+                                      ChildStoryPage(story: story),
                                 ),
                               );
-                              //If Story Deletion is selected,
-                              // it removes the story from the list,
-                              //and rebuilds the Stories List Page.
-                              if (deleteOrEdit != null) {
-                                if (deleteOrEdit == 'delete') {
-
-                                  //Deletes story's local image and audio files.
-                                  await deleteStoryFile(story);
-
-                                  //Deletes the story data from Hive.
-                                  await storyBox.delete(story.hiveKey);
-
-                                  //Rebuilds stories list.
-                                  setState(() {});
-
-                                } else if (deleteOrEdit is Story) {
-                                  setState(() {
-                                    storyBox.put(
-                                      story.hiveKey,
-                                      deleteOrEdit.toMap(),
-                                    );
-                                  });
-                                }
-                              }
                             },
                           ),
                         );
