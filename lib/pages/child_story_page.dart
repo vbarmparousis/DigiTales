@@ -1,5 +1,6 @@
 //Import Libraries
 import 'dart:io';
+import 'dart:async';
 
 //Import Packages
 import 'package:flutter/material.dart';
@@ -39,32 +40,34 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
   //Checks if the background music has started.
   bool isBackgroundMusicStarted = false;
 
-  //Checks if the background music is paused..
+  //Checks if the background music is paused.
   bool isBackgroundMusicPaused = false;
 
+  //Controls the page recording voice volume.
+  static const double pageAudioVolume = 1.0;
+
   //Controls the background music volume.
-  static const double backgroundMusicVolume = 0.025;
+  static const double backgroundMusicVolume = 0.05;
 
-  //Stores the current page audio duration.
-  Duration duration = Duration.zero;
+  //Checks if automatic page turning is enabled.
+  bool isAutoplayEnabled = false;
 
-  //Stores current page audio playback position.
-  Duration position = Duration.zero;
+  //Book UI colors.
+  static const Color bookBrown = Color(0xFF8A5A2B);
+  static const Color bookDarkBrown = Color(0xFF4A2A12);
+  static const Color bookCream = Color(0xFFFFF1D0);
+  static const Color bookPageCream = Color(0xFFFFFAEC);
 
   //Controls the page flip widget
-  //GlobalKey grants access to PageFlipWidget's state,
+  //GlobalKey grants access to PageFlipWidget's state.
   final GlobalKey<PageFlipWidgetState> _pageFlipController =
       GlobalKey<PageFlipWidgetState>();
 
-  //Stores the current page index.
-  //The first story page has index 0, so the cover page
-  //must have index -1.
+  //Stores the current page index:
+  //Cover page: -1.
+  //Real story pages: from 0 to (story.pages.length-1).
+  //"THE END" page: story.pages.length.
   int currentPageIndex = -1;
-
-  //Formats seconds into HH:MM:SS format.
-  String formatTime(int seconds) {
-    return '${(Duration(seconds: seconds))}'.split('.')[0].padLeft(8, '0');
-  }
 
   //Sets the audio for both audio players.
   //This allows current page audio and background music to play
@@ -76,7 +79,7 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
       focus: AudioContextConfigFocus.mixWithOthers,
     ).build();
 
-    //Applies the audio context to the preview page audio player
+    //Applies the audio context to the page audio player
     //and background music audio player.
     await _audioPlayer.setAudioContext(audioContext);
     await _backgroundMusicAudioPlayer.setAudioContext(audioContext);
@@ -104,36 +107,77 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
       });
     });
 
-    //Listens for changes in the current page audio duration.
-    _audioPlayer.onDurationChanged.listen((newDuration) {
-      //Keeps the longest valid duration as the maximum duration
-      //of the  audio slider.
-      setState(() {
-        duration = newDuration;
-      });
-    });
-
-    //Listens for changes in the current page audio position.
-    _audioPlayer.onPositionChanged.listen((newPosition) {
-      //Updates the current slider position while the audio is being played.
-      setState(() {
-        position = newPosition;
-      });
-    });
-
     //Listens for when the current page audio finishes completely.
-    _audioPlayer.onPlayerComplete.listen((event) async {
-      //Resets the audio slider position back to the beginning.
-      await _audioPlayer.seek(Duration.zero);
-
-      //Stops audio and background music,
-      //audio button returns to 'Play'.
-      setState(() {
-        isPlaying = false;
-        isPaused = false;
-        position = Duration.zero;
-      });
+    _audioPlayer.onPlayerComplete.listen((_) async {
+      await handlePageAudioComplete();
     });
+  }
+
+  //Calculates a suitable decoding width for both phones and tablets.
+  int calculateStoryImageCacheWidth() {
+    final MediaQueryData mediaQuery = MediaQuery.of(context);
+
+    //Converts the screen width from logical pixels to physical pixels
+    final int physicalScreenWidth =
+        (mediaQuery.size.width * mediaQuery.devicePixelRatio).round();
+
+    return physicalScreenWidth.clamp(1200, 2048).toInt();
+  }
+
+  //Creates the same resized provider for displaying and precaching images.
+  ImageProvider<Object> getStoryImageProvider(String imagePath) {
+    return ResizeImage.resizeIfNeeded(
+      calculateStoryImageCacheWidth(),
+      null,
+      FileImage(File(imagePath)),
+    );
+  }
+
+  //Precaches a small group of images without blocking the story page.
+  //This helps prevent white flashing when a page image is shown
+  //for the first time during the page flip animation.
+  Future<void> precacheImagePaths(Iterable<String> imagePaths) async {
+    //Removes duplicate and empty paths.
+    final Set<String> validPaths = imagePaths
+        .where((imagePath) => imagePath.isNotEmpty)
+        .toSet();
+
+    for (final imagePath in validPaths) {
+      if (!mounted) {
+        return;
+      }
+
+      final imageFile = File(imagePath);
+
+      if (!imageFile.existsSync()) {
+        continue;
+      }
+      try {
+        await precacheImage(getStoryImageProvider(imagePath), context);
+      } catch (_) {
+        //The story can still open if an image can't be decoded.
+      }
+    }
+  }
+
+  //Prepares the pages near the current page.
+  Future<void> precacheNearbyPages(int currentIndex) async {
+    if (widget.story.pages.isEmpty) {
+      return;
+    }
+    final List<String> nearbyImagePaths = [];
+
+    //Prepares the previous page, current page and the next two story pages.
+    for (
+      int pageIndex = currentIndex - 1;
+      pageIndex <= currentIndex + 2;
+      pageIndex++
+    ) {
+      if (pageIndex >= 0 && pageIndex < widget.story.pages.length) {
+        nearbyImagePaths.add(widget.story.pages[pageIndex].pageImage);
+      }
+    }
+    await precacheImagePaths(nearbyImagePaths);
   }
 
   //Starts background music if it hasn't started yet.
@@ -154,6 +198,7 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
     // it resumes only when resumeIfPaused is true.
     if (isBackgroundMusicPaused) {
       if (resumeIfPaused) {
+        await _backgroundMusicAudioPlayer.setVolume(backgroundMusicVolume);
         await _backgroundMusicAudioPlayer.resume();
         isBackgroundMusicPaused = false;
         isBackgroundMusicStarted = true;
@@ -186,15 +231,13 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
   //Stops only the current page audio.
   //The background music continues.
   Future<void> stopPageAudio() async {
-    //Stops only the current age audio.
+    //Stops only the current page audio.
     await _audioPlayer.stop();
 
     //Resets only the page audio UI.
     setState(() {
       isPlaying = false;
       isPaused = false;
-      duration = Duration.zero;
-      position = Duration.zero;
     });
   }
 
@@ -233,14 +276,14 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
     isBackgroundMusicPaused = false;
   }
 
-  //Starts current page's audio.
+  //Starts or Resumes the current page's audio.
   Future<void> startPageAudio() async {
     //If there are no pages, the function stops.
     if (widget.story.pages.isEmpty) {
       return;
     }
 
-    //If the current page is the cover page or the 'END' page,
+    //If the current page is the cover page or the 'The End' page,
     //the function stops.
     if (currentPageIndex < 0 || currentPageIndex >= widget.story.pages.length) {
       return;
@@ -258,10 +301,13 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
     //Waits until both audio players are ready to play together.
     await audioSetupFuture;
 
-    //If the preview page audio was paused before,
-    //resume the preview page audio and the background music.
+    //If the page audio was paused before,
+    //resume the page audio and the background music.
     if (isPaused) {
-      //Resumes the preview page audio from the paused position.
+      //Sets the page recording voice volume.
+      await _audioPlayer.setVolume(pageAudioVolume);
+
+      //Resumes the page audio from the paused position.
       await _audioPlayer.resume();
 
       //Resumes the background music if it was paused.
@@ -269,29 +315,45 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
         await startBackgroundMusic(resumeIfPaused: true);
       }
 
-      //Resets isPreviewPaused because the preview audio is no longer paused.
+      //Resets isPaused and isPlaying because the audio is no longer paused.
       setState(() {
         isPaused = false;
+        isPlaying = true;
       });
 
       return;
     }
 
-    //Stops only audio the current page audio
+    //Stops only the current page audio
     //The background music continues.
-    await stopPageAudio();
+    await _audioPlayer.stop();
+
+    //Resets isPaused and isPlaying because the audio is no longer being played.
+    setState(() {
+      isPlaying = false;
+      isPaused = false;
+    });
 
     //Starts or resumes the background music.
     //If it is already playing, it continues to play.
     await startBackgroundMusic(resumeIfPaused: true);
 
+    //Sets the page recording voice volume.
+    await _audioPlayer.setVolume(pageAudioVolume);
+
     //Plays the selected page audio from the local device file path.
     await _audioPlayer.play(DeviceFileSource(currentPageAudio));
+
+    //Resets isPaused and isPlaying because the audio is no longer paused.
+    setState(() {
+      isPlaying = true;
+      isPaused = false;
+    });
   }
 
-  //Pauses the current page audio.
+  //Pauses the current page audio and the background music.
   Future<void> pauseAudio() async {
-    //Pauses the current audio.
+    //Pauses the current page audio.
     await _audioPlayer.pause();
 
     //Pauses the background music if it has started.
@@ -302,31 +364,61 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
 
     //Sets the audio as paused.
     setState(() {
+      isPlaying = false;
       isPaused = true;
     });
   }
 
+  //Runs when the current page audio finishes.
+  Future<void> handlePageAudioComplete() async {
+    //Stops audio and background music,
+    //audio button returns to 'Play'.
+    setState(() {
+      isPlaying = false;
+      isPaused = false;
+    });
+
+    //If Auto Play is enabled, continues automatically to the next page.
+    if (isAutoplayEnabled) {
+      await goToNextPage();
+      return;
+    }
+
+    //If Auto Play is off, the background music pauses,
+    // if it has already started.
+    if (isBackgroundMusicStarted) {
+      await _backgroundMusicAudioPlayer.pause();
+      isBackgroundMusicPaused = true;
+    }
+  }
+
   //Runs when the user swipes to another page.
   Future<void> swipePage(int pageNumber) async {
-    //Checks if page audio was playing before changing page.
-    //This is used to decide if the next page should play audio automatically.
-    final bool autoplayMode = isPlaying;
-
     //Stops the current page audio before changing the page.
     //The background music continues to play between story pages.
     await stopPageAudio();
 
     //Check if a page is an actual story page
-    //and not the cover page or the 'END' page.
+    //and not the cover page or the 'The End' page.
     final bool isStoryPage =
         (pageNumber > 0 && pageNumber <= widget.story.pages.length);
 
     setState(() {
-      //If the current page is the cover page or the 'END' page,
+      //If the current page is the cover page,
       //there is no audio to play.
-      if (!isStoryPage) {
+      if (pageNumber == 0) {
         currentPageIndex = -1;
-      } else {
+      }
+      //If the current page is the 'The End' page,
+      //there is no audio to play.
+      else if (pageNumber > widget.story.pages.length) {
+        currentPageIndex = widget.story.pages.length;
+
+        //Turns off Auto Play.
+        isAutoplayEnabled = false;
+      }
+      //If the current page is a real story page, it contains audio.
+      else {
         //PageFlipWidget counts the cover page in its page number,
         //but in widget.story.pages the first story page has index 0,
         //so we subtract 1 from pageNumber.
@@ -337,87 +429,133 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
       //and resets the audio slider position back to the beginning.
       isPlaying = false;
       isPaused = false;
-      duration = Duration.zero;
-      position = Duration.zero;
     });
 
-    //If the current page is an actual story,
-    //background music starts or continues.
-    if (isStoryPage) {
-      await startBackgroundMusic(resumeIfPaused: autoplayMode);
-
-      //If audio was already playing before the page changed,
-      //the new page audio starts automatically.
-      if (autoplayMode) {
-        await startPageAudio();
-      }
+    //Prepares nearby page images in the background.
+    if (currentPageIndex >= 0 && currentPageIndex < widget.story.pages.length) {
+      unawaited(precacheNearbyPages(currentPageIndex));
     }
-    //If the current page is the cover page or the 'END' page,
+
+    //If the current page is an actual story page,
+    //the audio starts automatically.
+    if (isStoryPage) {
+      await startPageAudio();
+    }
+    //If the current page is the cover page or the 'The End' page,
     //background music fades and stops.
     else {
       await fadeOutBackgroundMusic();
     }
+  }
 
-    //????AUTOPLAY????
-    //If the current page is a real story page (with audio),
-    //starts the audio playback automatically.
-    //if (currentPageIndex != -1) {
-    //  await startPageAudio();
-    //}
+  //Moves the story book to the previous page.
+  Future<void> goToPreviousPage() async {
+    //If the current page is the cover page, the function stops.
+    if (currentPageIndex <= -1) {
+      return;
+    }
+
+    //Moves the PageFlipWidget to the previous page.
+    await _pageFlipController.currentState?.previousPage();
+  }
+
+  //Moves the story book to the next page.
+  Future<void> goToNextPage() async {
+    //If the current page is the "THE END" page, the function stops.
+    if (currentPageIndex >= widget.story.pages.length) {
+      return;
+    }
+
+    //Moves the PageFlipWidget to the next page.
+    await _pageFlipController.currentState?.nextPage();
   }
 
   //Creates a visual book page for each story page.
   Widget _buildStoryBookPage(int pageIndex) {
     //Gets the current story page.
     final storyPage = widget.story.pages[pageIndex];
+
     return Container(
-      //Ads space around the book page.
-      margin: const EdgeInsets.all(12),
+      //Adds space around the book page.
+      margin: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        //Adds shadow under the page.
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            //Shifts shadow by 8 pixels down.
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          //Makes all Stack children fill the container.
-          fit: StackFit.expand,
-          children: [
-            //Story Page Image
-            if (storyPage.pageImage.isNotEmpty)
-              Image.file(File(storyPage.pageImage), fit: BoxFit.cover)
-            else
-              Container(
-                color: Colors.teal.withValues(alpha: 0.08),
-                child: const Icon(
-                  Icons.auto_stories_rounded,
-                  size: 120,
-                  color: Colors.teal,
+      //Black frame on all sides.
+      child: Padding(
+        padding: const EdgeInsets.all(3.5),
+
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            //Makes all Stack children fill the container.
+            fit: StackFit.expand,
+            children: [
+              //Story Page Image.
+              if (storyPage.pageImage.isNotEmpty)
+                Image(
+                  image: getStoryImageProvider(storyPage.pageImage),
+                  fit: BoxFit.cover,
+                  //Keeps the currently displayed image frame while Flutter
+                  //resolves the image provider during rebuild.
+                  gaplessPlayback: true,
+
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: bookPageCream,
+                      child: const Icon(
+                        Icons.broken_image_rounded,
+                        size: 100,
+                        color: bookBrown,
+                      ),
+                    );
+                  },
+                )
+              else
+                Container(
+                  color: bookPageCream,
+                  child: const Icon(
+                    Icons.auto_stories_rounded,
+                    size: 120,
+                    color: bookBrown,
+                  ),
+                ),
+
+              //Adds shadow overlay on the lower part of the page
+              //so that the page number is easier to see.
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.15),
+                      ],
+                    ),
+                  ),
                 ),
               ),
 
-            //Page Number.
-            Positioned(
-              right: 20,
-              bottom: 20,
-              child: Center(
+              //Page Number.
+              Positioned(
+                right: 10,
+                bottom: 10,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.55),
+                    ),
                   ),
                   child: Text(
                     '${pageIndex + 1}/${widget.story.pages.length}',
@@ -428,8 +566,8 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -437,55 +575,174 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
 
   Widget _buildCoverPage() {
     return Container(
-      margin: const EdgeInsets.all(12),
+      //Cover page is bigger than the actual story pages.
+      margin: const EdgeInsets.all(8),
+
+      padding: const EdgeInsets.all(8),
+
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: bookDarkBrown,
+
+        //Outer line border.
+        border: Border.all(color: bookBrown, width: 4),
+
+        borderRadius: BorderRadius.circular(10),
+
+        //Adds shadow under the page.
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 22,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            //Story Page Image
-            if (widget.story.coverImage.isNotEmpty)
-              Image.file(
-                File(widget.story.coverImage),
-                //height: 260,
-                //width: double.infinity,
-                fit: BoxFit.cover,
-              )
-            else
-              Container(
-                color: Colors.teal.withValues(alpha: 0.08),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      widget.story.title,
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.teal,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+
+      child: Container(
+        decoration: BoxDecoration(
+          color: bookDarkBrown,
+          borderRadius: BorderRadius.circular(10),
+          //Inner line border.
+          border: Border.all(color: bookBrown, width: 2),
+        ),
+
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              //Story Page Image.
+              if (widget.story.coverImage.isNotEmpty)
+                Image(
+                  image: getStoryImageProvider(widget.story.coverImage),
+                  fit: BoxFit.cover,
+
+                  //Keeps the cover image frame while Flutter
+                  //resolves the image provider during rebuild.
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: bookDarkBrown,
+                      child: const Icon(
+                        Icons.broken_image_rounded,
+                        size: 100,
+                        color: bookCream,
+                      ),
+                    );
+                  },
+                )
+              else
+                Container(
+                  color: Colors.teal.withValues(alpha: 0.08),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        widget.story.title,
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.teal,
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  //Creates the final book page.
+  Widget _buildEndPage() {
+    return Container(
+      decoration: BoxDecoration(
+        color: bookDarkBrown,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Container(
+        //Adds space around the book page.
+        margin: const EdgeInsets.all(8),
+
+        //Outer frame thickness.
+        padding: const EdgeInsets.all(8),
+
+        decoration: BoxDecoration(
+          color: bookDarkBrown,
+
+          //Outer line border.
+          border: Border.all(color: bookBrown, width: 3),
+          borderRadius: BorderRadius.circular(10),
+
+          //Adds shadow under the page.
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 22,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            color: bookDarkBrown,
+            borderRadius: BorderRadius.circular(10),
+            //Inner line border.
+            border: Border.all(color: bookBrown, width: 2),
+          ),
+
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.auto_stories_rounded, size: 90, color: bookCream),
+                SizedBox(height: 20),
+                Text(
+                  'The End',
+                  style: TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.bold,
+                    color: bookCream,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  //Builds the story book section.
+  Widget _buildStoryBookSection() {
+    return PageFlipWidget(
+      key: _pageFlipController,
+
+      //Runs when a page is flipped.
+      onPageFlipped: swipePage,
+
+      //Book background color.
+      backgroundColor: Colors.transparent,
+
+      lastPage: _buildEndPage(),
+      children: <Widget>[
+        //Book Cover Page.
+        _buildCoverPage(),
+
+        for (
+          int pageIndex = 0;
+          pageIndex < widget.story.pages.length;
+          pageIndex++
+        )
+          _buildStoryBookPage(pageIndex),
+      ],
     );
   }
 
@@ -508,7 +765,6 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
 
         title: Text(widget.story.title),
       ),
-
       body: widget.story.pages.isEmpty
           ? Center(
               child: Text(
@@ -521,74 +777,265 @@ class _ChildStoryPageState extends State<ChildStoryPage> {
               child: Column(
                 children: [
                   Expanded(
-                    child: PageFlipWidget(
-                      key: _pageFlipController,
-
-                      //Runs when a page is flipped.
-                      onPageFlipped: swipePage,
-
-                      //Book background color.
-                      backgroundColor: Colors.brown,
-
-                      lastPage: Container(
-                        margin: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'The End',
-                            style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.teal,
-                            ),
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                           ),
-                        ),
+                        ],
                       ),
-                      children: <Widget>[
-                        //Book Cover Page.
-                        _buildCoverPage(),
 
-                        for (
-                          int pageIndex = 0;
-                          pageIndex < widget.story.pages.length;
-                          pageIndex++
-                        )
-                          _buildStoryBookPage(pageIndex),
-                      ],
+                      child: _buildStoryBookSection(),
                     ),
                   ),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      //Play/Pause Button.
-                      IconButton(
-                        iconSize: 90,
-                        color: Colors.orange,
-
-                        //If the current page is the cover page or the 'END' page,
-                        //the Play button is disabled.
-                        onPressed: currentPageIndex == -1
-                            ? null
-                            : () {
-                                if (isPlaying) {
-                                  pauseAudio();
-                                } else {
-                                  startPageAudio();
-                                }
-                              },
-
-                        icon: Icon(
-                          //Changes dynamically the button icon between Play and Pause.
-                          isPlaying
-                              ? Icons.pause_circle_filled_rounded
-                              : Icons.play_circle_filled_rounded,
+                  Container(
+                    margin: EdgeInsets.zero,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            //Previous Page Button.
+                            SizedBox(
+                              height: 60,
+                              width: 60,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  backgroundColor: Colors.teal,
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: Colors.grey,
+                                  disabledForegroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                //If the current page is the cover page,
+                                //the button is disabled.
+                                onPressed: currentPageIndex <= -1
+                                    ? null
+                                    : goToPreviousPage,
+                                child: const Icon(
+                                  Icons.chevron_left_rounded,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            //Main Play/Pause Button.
+                            Expanded(
+                              child: SizedBox(
+                                height: 60,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: Colors.grey,
+                                    disabledForegroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+
+                                  //If the current page is the cover page or the 'The End' page,
+                                  //the Play button is disabled.
+                                  onPressed:
+                                      currentPageIndex < 0 ||
+                                          currentPageIndex >=
+                                              widget.story.pages.length
+                                      ? null
+                                      : () {
+                                          if (isPlaying) {
+                                            pauseAudio();
+                                          } else {
+                                            startPageAudio();
+                                          }
+                                        },
+
+                                  icon: Icon(
+                                    //Changes dynamically the button icon between Play and Pause.
+                                    isPlaying
+                                        ? Icons.pause_circle_filled_rounded
+                                        : Icons.play_circle_filled_rounded,
+                                    size: 34,
+                                  ),
+                                  label: Text(
+                                    isPlaying ? 'Pause' : 'Play',
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            //Next Page Button.
+                            SizedBox(
+                              height: 60,
+                              width: 60,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  backgroundColor: Colors.teal,
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: Colors.grey,
+                                  disabledForegroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                                //If the current page is the "THE END" page,
+                                //the button is disabled.
+                                onPressed:
+                                    currentPageIndex >=
+                                        widget.story.pages.length
+                                    ? null
+                                    : goToNextPage,
+                                child: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        //Auto Play Switch.
+                        Container(
+                          height: 54,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: currentPageIndex >= widget.story.pages.length
+                                ? Colors.grey
+                                : isAutoplayEnabled
+                                ? bookBrown
+                                : bookDarkBrown,
+
+                            border: Border.all(
+                              color:
+                                  currentPageIndex >= widget.story.pages.length
+                                  ? Colors.grey
+                                  : isAutoplayEnabled
+                                  ? bookDarkBrown
+                                  : bookBrown,
+                              width: 3,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: SwitchListTile(
+                            //Current Auto Play state.
+                            value: isAutoplayEnabled,
+
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+
+                            //Auto Play icon.
+                            secondary: Icon(
+                              Icons.auto_awesome_rounded,
+                              color:
+                                  currentPageIndex >= widget.story.pages.length
+                                  ? Colors.white
+                                  : bookCream,
+                            ),
+
+                            //Auto Play text.
+                            title: Text(
+                              currentPageIndex >= widget.story.pages.length
+                                  ? 'Auto Play: Disabled'
+                                  : isAutoplayEnabled
+                                  ? 'Auto Play: On'
+                                  : 'Auto Play: Off',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    currentPageIndex >=
+                                        widget.story.pages.length
+                                    ? Colors.white
+                                    : bookCream,
+                              ),
+                            ),
+
+                            activeThumbColor: bookCream,
+                            activeTrackColor: bookDarkBrown,
+                            inactiveThumbColor:
+                                currentPageIndex >= widget.story.pages.length
+                                ? Colors.white
+                                : bookCream,
+                            inactiveTrackColor:
+                                currentPageIndex >= widget.story.pages.length
+                                ? Colors.grey
+                                : bookBrown,
+
+                            //The Auto Play Switch is disabled on the "The END" page.
+                            onChanged:
+                                currentPageIndex >= widget.story.pages.length
+                                ? null
+                                : (bool value) async {
+                                    //Updates Auto Play using the switch value.
+                                    setState(() {
+                                      isAutoplayEnabled = value;
+                                    });
+
+                                    //If Auto Play was turned off, keeps the same current audio state.
+                                    if (!isAutoplayEnabled) {
+                                      return;
+                                    }
+
+                                    //If Auto Play starts while the current page is the cover page,
+                                    //moves the story to the first actual story page.
+                                    if (currentPageIndex == -1) {
+                                      await goToNextPage();
+                                      return;
+                                    }
+
+                                    //If Auto Play starts while the current page is an actual story page
+                                    //and audio is not playing, starts or resumes the current page audio.
+                                    if (currentPageIndex >= 0 &&
+                                        currentPageIndex <
+                                            widget.story.pages.length &&
+                                        !isPlaying) {
+                                      await startPageAudio();
+                                    }
+                                  },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
