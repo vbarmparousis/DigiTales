@@ -9,11 +9,16 @@ import 'package:share_plus/share_plus.dart';
 
 //My Imports
 import '../models/story.dart';
+import '../theme/app_colors.dart';
+import '../widgets/custom_app_bar.dart';
+import '../widgets/story_book_cover.dart';
+import 'button_styles.dart';
 import 'child_story_page.dart';
 import 'story_creation_page.dart';
 import '../services/story_export.dart';
 import '../services/story_import.dart';
 import 'edit_story_page.dart';
+import '../widgets/section_card.dart';
 
 //Popup menu actions of each story.
 enum StoryMenuAction { edit, export, delete }
@@ -333,41 +338,35 @@ class _ParentListPageState extends State<ParentListPage> {
       filteredStories.sort((a, b) => b.title.compareTo(a.title));
     }
     //Sorts Stories by shortest Duration.
-    else if (sortingOption == 'Shortest') {
+    else if (sortingOption == 'Shortest First') {
       filteredStories.sort(
         (a, b) => getTotalStoryDuration(a).compareTo(getTotalStoryDuration(b)),
       );
     }
     //Sorts Stories by longest Duration.
-    else if (sortingOption == 'Longest') {
+    else if (sortingOption == 'Longest First') {
       filteredStories.sort(
         (a, b) => getTotalStoryDuration(b).compareTo(getTotalStoryDuration(a)),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        //Same Background as the Home Page
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Library'),
+      appBar: const CustomAppBar(
+        title: 'Library',
+        foregroundColor: Colors.white,
+        backgroundColor: AppColors.parentMode,
+        textColor: Colors.white,
       ),
 
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Row(
             children: [
               //Create Story Button.
               Expanded(
                 child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
+                  style: ButtonStyles.primaryParentButton,
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Create Story'),
                   onPressed: () async {
@@ -380,14 +379,7 @@ class _ParentListPageState extends State<ParentListPage> {
               //Import Story Button.
               Expanded(
                 child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
+                  style: ButtonStyles.secondaryParentButton,
                   icon: const Icon(Icons.file_upload_rounded),
                   label: const Text('Import Story'),
                   onPressed: () async {
@@ -401,279 +393,394 @@ class _ParentListPageState extends State<ParentListPage> {
       ),
 
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
         child: Column(
           children: [
-            //Search TextField
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search Stories',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(35),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  //Converts search text to lowercase
-                  //for case-insensitive searching.
-                  searchText = value.toLowerCase();
-                });
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            //Sorting Dropdown
-            DropdownButtonFormField<String>(
-              initialValue: sortingOption,
-
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(35),
-                ),
-              ),
-
-              //Sorting Dropdown
-              items: const [
-                DropdownMenuItem(value: 'A-Z', child: Text('Sort A-Z')),
-
-                DropdownMenuItem(value: 'Z-A', child: Text('Sort Z-A')),
-
-                DropdownMenuItem(
-                  value: 'Shortest',
-                  child: Text('Shortest First'),
-                ),
-
-                DropdownMenuItem(
-                  value: 'Longest',
-                  child: Text('Longest First'),
-                ),
-              ],
-
-              onChanged: (value) {
-                setState(() {
-                  sortingOption = value!;
-                });
-              },
-            ),
-
-            const SizedBox(height: 32),
-
-            Expanded(
-              child: storyBox.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.book_rounded,
-                            size: 100,
-                            color: Colors.teal,
+            //Search and Sort Section Card.
+            SectionCard(
+              children: [
+                Row(
+                  children: [
+                    //Search TextField
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search a Story',
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: AppColors.appText,
                           ),
-                          const Text(
-                            'There are no stories yet.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 24),
+
+                          //Adds a clear button only when the user types something.
+                          suffixIcon: searchText.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    color: AppColors.appText,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      searchText = '';
+                                    });
+                                  },
+                                ),
+
+                          filled: true,
+                          fillColor: Colors.white,
+
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: AppColors.appText,
+                              width: 1.5,
+                            ),
+                          ),
+
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: AppColors.appText,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+
+                        onChanged: (value) {
+                          setState(() {
+                            //Trims search text and converts it to lowercase
+                            //for case-insensitive searching.
+                            searchText = value.trim().toLowerCase();
+                          });
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    //Sorting Popup Button.
+                    Container(
+                      height: 58,
+                      width: 58,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.appText,
+                          width: 1.5,
+                        ),
+                      ),
+
+                      child: PopupMenuButton<String>(
+                        icon: const Icon(
+                          Icons.sort_rounded,
+                          color: AppColors.appText,
+                        ),
+
+                        //Current sorting option.
+                        initialValue: sortingOption,
+
+                        //Runs when a sorting option is selected.
+                        onSelected: (value) {
+                          setState(() {
+                            sortingOption = value;
+                          });
+                        },
+
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'A-Z',
+                            child: Text(
+                              'Sort A-Z',
+                              style: TextStyle(color: AppColors.appText),
+                            ),
+                          ),
+
+                          PopupMenuItem(
+                            value: 'Z-A',
+                            child: Text(
+                              'Sort Z-A',
+                              style: TextStyle(color: AppColors.appText),
+                            ),
+                          ),
+
+                          PopupMenuItem(
+                            value: 'Shortest First',
+                            child: Text(
+                              'Shortest First',
+                              style: TextStyle(color: AppColors.appText),
+                            ),
+                          ),
+
+                          PopupMenuItem(
+                            value: 'Longest First',
+                            child: Text(
+                              'Longest First',
+                              style: TextStyle(color: AppColors.appText),
+                            ),
                           ),
                         ],
                       ),
-                    )
-                  : filteredStories.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No stories found.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 20),
-                      ),
-                    )
-                  : ListView.builder(
-                      //Uses widget to get access to stories in this State
-                      itemCount: filteredStories.length,
-                      itemBuilder: (context, index) {
-                        //Gets one filtered story from search results.
-                        final story = filteredStories[index];
+                    ),
+                  ],
+                ),
 
-                        return Card(
-                          child: ListTile(
-                            leading: story.coverImage.isNotEmpty
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Image.file(
-                                      File(story.coverImage),
-                                      height: 60,
-                                      width: 60,
-                                      fit: BoxFit.cover,
+                const SizedBox(height: 12),
 
-                                      //The library card needs a thumbnail-sized image.
-                                      cacheWidth: 300,
+                //Shows the current sorting option under the search row.
+                Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Sorting: $sortingOption',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.appText,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
 
-                                      //Keeps the image stable during rebuilds.
-                                      gaplessPlayback: true,
+            //Story List Section Card.
+            Expanded(
+              child: SectionCard(
+                children: [
+                  Expanded(
+                    child: storyBox.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.book_rounded,
+                                  size: 100,
+                                  color: AppColors.appText,
+                                ),
+                                const Text(
+                                  'There are no stories yet.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    color: AppColors.appText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : filteredStories.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No stories found.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: AppColors.appText,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            //Uses widget to get access to stories in this State
+                            itemCount: filteredStories.length,
+                            itemBuilder: (context, index) {
+                              //Gets one filtered story from search results.
+                              final story = filteredStories[index];
 
-                                      filterQuality: FilterQuality.medium,
+                              return Card(
+                                color: AppColors.listCard,
+                                clipBehavior: Clip.antiAlias,
 
-                                      //Shows a placeholder instead of
-                                      //a white flash while the image is decoded.
-                                      frameBuilder:
-                                          (
-                                            context,
-                                            child,
-                                            frame,
-                                            wasSynchronouslyLoaded,
-                                          ) {
-                                            if (wasSynchronouslyLoaded ||
-                                                frame != null) {
-                                              return child;
-                                            }
+                                child: InkWell(
+                                  onTap: () async {
+                                    //Prepares the cover and first pages before opening ChildStoryPage.
+                                    await precacheStoryImagesBeforeOpening(
+                                      context,
+                                      story,
+                                    );
 
-                                            return Container(
-                                              height: 60,
-                                              width: 60,
-                                              color: Colors.teal.withValues(
-                                                alpha: 0.10,
-                                              ),
-                                              child: const Center(
-                                                child: Icon(
-                                                  Icons.auto_stories_rounded,
-                                                  size: 32,
-                                                  color: Colors.teal,
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            ChildStoryPage(story: story),
+                                      ),
+                                    );
+                                  },
+
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 10,
+                                    ),
+
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        //Miniature Book Cover.
+                                        SizedBox(
+                                          width: 66,
+                                          height: 102,
+
+                                          child: StoryBookCover(
+                                            title: story.title,
+                                            imagePath: story.coverImage,
+                                            imageCacheWidth: 300,
+                                            isMiniatureMode: true,
+                                            showTitle: false,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              //Story Title.
+                                              Text(
+                                                story.title,
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: AppColors.appText,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
                                                 ),
                                               ),
-                                            );
+                                              const SizedBox(height: 4),
+
+                                              //Story Page Number.
+                                              Text(
+                                                'Pages: ${story.pages.length}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: AppColors.appText,
+                                                ),
+                                              ),
+
+                                              const SizedBox(height: 4),
+
+                                              //Total Story Duration.
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.access_time_rounded,
+                                                    size: 16,
+                                                    color: AppColors.appText,
+                                                  ),
+                                                  const SizedBox(width: 4),
+
+                                                  //Show Duration in ListTile.
+                                                  Text(
+                                                    formatTime(
+                                                      getTotalStoryDuration(
+                                                        story,
+                                                      ),
+                                                    ),
+                                                    style: const TextStyle(
+                                                      color: AppColors.appText,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        //Three dot menu with the available story actions.
+                                        PopupMenuButton<StoryMenuAction>(
+                                          icon: const Icon(
+                                            Icons.more_vert_rounded,
+                                            color: AppColors.appText,
+                                          ),
+
+                                          //Runs when an action is selected from the menu.
+                                          onSelected: (action) async {
+                                            switch (action) {
+                                              case StoryMenuAction.edit:
+                                                await editStory(
+                                                  story: story,
+                                                  storyBox: storyBox,
+                                                );
+                                                break;
+                                              case StoryMenuAction.export:
+                                                await exportStory(story);
+                                                break;
+
+                                              case StoryMenuAction.delete:
+                                                await deleteStory(
+                                                  story: story,
+                                                  storyBox: storyBox,
+                                                );
+                                                break;
+                                            }
                                           },
+                                          itemBuilder: (context) => const [
+                                            PopupMenuItem(
+                                              value: StoryMenuAction.edit,
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.edit_rounded,
+                                                    color: AppColors.appText,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Edit'),
+                                                ],
+                                              ),
+                                            ),
+
+                                            PopupMenuItem(
+                                              value: StoryMenuAction.export,
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.ios_share_rounded,
+                                                    color: AppColors.appText,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Export'),
+                                                ],
+                                              ),
+                                            ),
+
+                                            PopupMenuItem(
+                                              value: StoryMenuAction.delete,
+                                              child: Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.delete_rounded,
+                                                    color: Colors.red,
+                                                  ),
+                                                  SizedBox(width: 12),
+                                                  Text('Delete'),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  )
-                                : const Icon(Icons.book_rounded),
-
-                            title: Text(
-                              story.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Pages: ${story.pages.length}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time_rounded,
-                                      size: 16,
-                                      color: Colors.grey,
-                                    ),
-                                    const SizedBox(width: 4),
-
-                                    //Show Duration in ListTile.
-                                    Text(
-                                      formatTime(getTotalStoryDuration(story)),
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-
-                            //Three dot menu with the available story actions.
-                            trailing: PopupMenuButton<StoryMenuAction>(
-                              icon: const Icon(Icons.more_vert_rounded),
-
-                              //Runs when an action is selected from the menu.
-                              onSelected: (action) async {
-                                switch (action) {
-                                  case StoryMenuAction.edit:
-                                    await editStory(
-                                      story: story,
-                                      storyBox: storyBox,
-                                    );
-                                    break;
-                                  case StoryMenuAction.export:
-                                    await exportStory(story);
-                                    break;
-
-                                  case StoryMenuAction.delete:
-                                    await deleteStory(
-                                      story: story,
-                                      storyBox: storyBox,
-                                    );
-                                    break;
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                  value: StoryMenuAction.edit,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.edit_rounded,
-                                        color: Colors.teal,
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('Edit'),
-                                    ],
                                   ),
-                                ),
-
-                                PopupMenuItem(
-                                  value: StoryMenuAction.export,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.ios_share_rounded,
-                                        color: Colors.teal,
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('Export'),
-                                    ],
-                                  ),
-                                ),
-
-                                PopupMenuItem(
-                                  value: StoryMenuAction.delete,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.delete_rounded,
-                                        color: Colors.red,
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('Delete'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            onTap: () async {
-                              //Prepares the cover and first pages before opening ChildStoryPage.
-                              await precacheStoryImagesBeforeOpening(
-                                context,
-                                story,
-                              );
-
-                              if (!context.mounted) {
-                                return;
-                              }
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      ChildStoryPage(story: story),
                                 ),
                               );
                             },
                           ),
-                        );
-                      },
-                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

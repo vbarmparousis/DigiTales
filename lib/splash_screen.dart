@@ -1,4 +1,5 @@
 import 'package:digital_storytelling_app/pages/role_selection_page.dart';
+import 'package:digital_storytelling_app/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,8 +23,8 @@ class _SplashScreenState
     //Allows fullscreen Splash Screen.
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
 
-    //Waits 4 seconds before opening the User Selection Page.
-    Future.delayed(Duration(seconds: 4), () {
+    //Waits 5 seconds before opening the User Selection Page.
+    Future.delayed(Duration(seconds: 5), () {
       //Replaces Splash Screen so the user
       //can't return to it using the back botton.
       Navigator.of(
@@ -50,7 +51,7 @@ class _SplashScreenState
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.orange, Colors.teal],
+            colors: [AppColors.childMode, AppColors.parentPrimary],
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
           ),
@@ -59,24 +60,21 @@ class _SplashScreenState
           //Centers widgets vertically.
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              height: 230,
-              width: 230,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.teal,
-                shape: BoxShape.rectangle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.8),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+            Center(
+              child: SizedBox(
+                height: 230,
+                width: 230,
+
+                child: Image.asset(
+                  'images/logo.png',
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
-              child: Image.asset('images/logo.png', fit: BoxFit.contain),
             ),
-            const SizedBox(height: 25),
+
+            const SizedBox(height: 32),
+
             const Text(
               'Digital Storytelling',
               textAlign: TextAlign.center,

@@ -10,12 +10,8 @@ class BackgroundMusic {
 
 //List that stores all background music songs.
 const List<BackgroundMusic> backgroundMusicList = [
-
   //BackgroundMusic is optional.
-  BackgroundMusic(
-    title: 'No Background Music',
-    musicPath: '',
-  ),
+  BackgroundMusic(title: 'No Background Music', musicPath: ''),
   BackgroundMusic(
     title: 'The Old Tower Inn',
     musicPath: 'background_music/Loop_The_Old_Tower_Inn.wav',

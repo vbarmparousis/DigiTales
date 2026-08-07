@@ -8,10 +8,12 @@ import 'package:path_provider/path_provider.dart';
 //My Imports
 import '../models/story.dart';
 import '../models/background_music.dart';
+import '../theme/app_colors.dart';
 import 'button_styles.dart';
 import '../widgets/recording_bottom_sheet.dart';
 import '../widgets/image_source_bottom_sheet.dart';
 import '../widgets/section_card.dart';
+import '../widgets/story_image_preview_frame.dart';
 
 class EditStoryPage extends StatefulWidget {
   //Holds the story object from the previous page
@@ -79,6 +81,15 @@ class _EditStoryPageState extends State<EditStoryPage> {
 
   //Stores selected page audio playback position.
   Duration previewPosition = Duration.zero;
+
+  //Checks if the cover image is in zoom mode.
+  bool isCoverImageZoomed = false;
+
+  //Checks if the page creation image is in zoom mode.
+  bool isPageImageZoomed = false;
+
+  //Checks if the carousel image is in zoom mode.
+  bool isCarouselImageZoomed = false;
 
   //Formats seconds into MM:SS format.
   String formatTime(int seconds) {
@@ -158,8 +169,8 @@ class _EditStoryPageState extends State<EditStoryPage> {
 
     //Listens for changes in the selected page audio duration.
     pagePreviewAudioPlayer.onDurationChanged.listen((newDuration) {
-      //Keeps the longest valid duration as the maximum duration
-      //of the preview audio slider.
+      //Stores the duration of the audio player.
+      //It is used as the maximum value of the preview slider.
       setState(() {
         previewDuration = newDuration;
       });
@@ -237,6 +248,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
     //without picking a cover image. (Nullable)
     final XFile? selectedImage = await imagePicker.pickImage(
       source: selectedImageSource,
+
       //Prevents very large camera photos from causing delays
       //during the page flip animation.
       maxWidth: 1920,
@@ -257,6 +269,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
     //to show the selected cover image.
     setState(() {
       coverImagePath = copiedImagePath;
+
+      //Returns the cover image preview to its normal portrait mode.
+      isCoverImageZoomed = false;
     });
   }
 
@@ -301,6 +316,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
     //to show the selected page image.
     setState(() {
       pageImagePath = copiedImagePath;
+
+      //Returns the page image preview to its normal portrait mode.
+      isPageImageZoomed = false;
     });
   }
 
@@ -353,6 +371,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
 
       //Resets page's audio duration.
       audioDuration = 0;
+
+      //Returns the now empty page image preview to its normal portrait mode.
+      isPageImageZoomed = false;
     });
 
     //Shows confirmation message after the page is added to the story.
@@ -470,6 +491,10 @@ class _EditStoryPageState extends State<EditStoryPage> {
       selectedPageIndex = index;
       previewDuration = Duration.zero;
       previewPosition = Duration.zero;
+
+      //Returns the current page preview to its normal portrait mode
+      //so the next or previous page image appears in portrait mode.
+      isCarouselImageZoomed = false;
     });
   }
 
@@ -559,6 +584,9 @@ class _EditStoryPageState extends State<EditStoryPage> {
         pageAudio: oldPage.pageAudio,
         pageAudioDuration: oldPage.pageAudioDuration,
       );
+
+      //Closes zoom mode because the selected page has a new image now.
+      isCarouselImageZoomed = false;
     });
   }
 
@@ -667,6 +695,10 @@ class _EditStoryPageState extends State<EditStoryPage> {
       //Resets preview audio parameters.
       previewDuration = Duration.zero;
       previewPosition = Duration.zero;
+
+      //Closes zoom mode because the selected page is now removed.
+      //Re-enables PageView swiping.
+      isCarouselImageZoomed = false;
     });
   }
 
@@ -719,51 +751,30 @@ class _EditStoryPageState extends State<EditStoryPage> {
                     decoration: InputDecoration(
                       labelText: 'Edit Story Title',
                       labelStyle: const TextStyle(
-                        color: Colors.teal,
+                        color: AppColors.appText,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   //Cover Image Preview.
 
                   //Displays the selected cover image.
-                  if (coverImagePath.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(25),
-                      child: Image.file(
-                        File(coverImagePath),
-                        height: 160,
-                        width: double.infinity,
-                        //Crops image to fit the preview area.
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else
-                    //Default Image Placeholder.
-                    Container(
-                      height: 160,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.teal.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.image_rounded,
-                        size: 70,
-                        color: Colors.teal,
-                      ),
-                    ),
-
-                  const SizedBox(height: 20),
+                  StoryImagePreviewFrame(
+                    imagePath: coverImagePath,
+                    isZoomed: isCoverImageZoomed,
+                    onZoomPressed: () {
+                      setState(() {
+                        isCoverImageZoomed = !isCoverImageZoomed;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
 
                   //Select Cover Image Button.
                   ElevatedButton.icon(
@@ -782,41 +793,21 @@ class _EditStoryPageState extends State<EditStoryPage> {
 
               //2. Section Card: Page Creation.
               SectionCard(
-                title: 'Current Page',
+                title: 'Page Creation',
                 icon: Icons.auto_stories_rounded,
                 children: [
-                  //Page Image Preview
-                  if (pageImagePath.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(25),
-                      child: Image.file(
-                        File(pageImagePath),
-                        height: 160,
-                        width: double.infinity,
-                        //Crops image to fit the preview area.
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else
-                    //Default Image Placeholder.
-                    Container(
-                      height: 160,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: Colors.teal.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: const Icon(
-                        Icons.image_rounded,
-                        size: 70,
-                        color: Colors.teal,
-                      ),
-                    ),
+                  //Page Image Preview.
+                  StoryImagePreviewFrame(
+                    imagePath: pageImagePath,
+                    isZoomed: isPageImageZoomed,
+                    onZoomPressed: () {
+                      setState(() {
+                        isPageImageZoomed = !isPageImageZoomed;
+                      });
+                    },
+                  ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   //Select Page Image Button.
                   ElevatedButton.icon(
@@ -832,7 +823,65 @@ class _EditStoryPageState extends State<EditStoryPage> {
                   ),
 
                   const SizedBox(height: 16),
+                  //Audio status container.
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      //Changes container background color depending
+                      //on audio existence.
+                      color: audioPath.isEmpty
+                          ? AppColors.disabled.withValues(alpha: 0.08)
+                          : AppColors.parentPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        width: 1.2,
+                        color: audioPath.isEmpty
+                            ? AppColors.disabled.withValues(alpha: 0.4)
+                            : AppColors.parentPrimary.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        //Audio Recording Status Icon.
+                        Icon(
+                          //Changes status icon depending
+                          //on audio existence.
+                          audioPath.isEmpty
+                              ? Icons.mic_off_rounded
+                              : Icons.check_circle_rounded,
+                          color: audioPath.isEmpty
+                              ? AppColors.disabled
+                              : AppColors.parentPrimary,
+                        ),
 
+                        const SizedBox(width: 10),
+
+                        Text(
+                          //Changes status text depending
+                          //on audio existence.
+                          audioPath.isEmpty
+                              ? 'No Audio Recorded'
+                              : 'Audio Recorded',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: audioPath.isEmpty
+                                //Changes status text color depending
+                                //on audio existence.
+                                ? AppColors.disabled
+                                : AppColors.parentPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   //Record Page Audio Button.
                   ElevatedButton.icon(
                     //Imported button style.
@@ -854,76 +903,25 @@ class _EditStoryPageState extends State<EditStoryPage> {
                     label: const Text('Record Page Audio'),
                   ),
 
-                  const SizedBox(height: 10),
-
-                  //Audio status container.
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      //Changes container background color depending
-                      //on audio existence.
-                      color: audioPath.isEmpty
-                          ? Colors.grey.withValues(alpha: 0.08)
-                          : Colors.teal.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        width: 1.2,
-                        color: audioPath.isEmpty
-                            ? Colors.grey.withValues(alpha: 0.4)
-                            : Colors.teal.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        //Audio Recording Status Icon.
-                        Icon(
-                          //Changes status icon depending
-                          //on audio existence.
-                          audioPath.isEmpty
-                              ? Icons.mic_off_rounded
-                              : Icons.check_circle_rounded,
-                          color: audioPath.isEmpty ? Colors.grey : Colors.teal,
-                        ),
-
-                        const SizedBox(width: 8),
-
-                        Text(
-                          //Changes status text depending
-                          //on audio existence.
-                          audioPath.isEmpty
-                              ? 'No audio recorded.'
-                              : 'Audio recorded.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: audioPath.isEmpty
-                                //Changes status text color depending
-                                //on audio existence.
-                                ? Colors.grey
-                                : Colors.teal,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   //Pages counter.
                   //Shows the number of added pages to the current story.
                   Center(
                     child: Chip(
-                      avatar: const Icon(Icons.auto_stories_rounded),
+                      avatar: const Icon(
+                        Icons.auto_stories_rounded,
+                        color: AppColors.appText,
+                      ),
                       label: Text('${pages.length} pages added.'),
+                      labelStyle: const TextStyle(
+                        color: AppColors.appText,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   //Add Page Button.
                   ElevatedButton.icon(
@@ -953,12 +951,12 @@ class _EditStoryPageState extends State<EditStoryPage> {
                     decoration: InputDecoration(
                       //labelText: 'Background Music',
                       labelStyle: const TextStyle(
-                        color: Colors.teal,
+                        color: AppColors.parentPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
 
@@ -999,7 +997,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                   icon: Icons.view_carousel_rounded,
                   children: [
                     SizedBox(
-                      height: 270,
+                      height: 310,
                       //Stacks left and right arrows in front of the preview page.
                       child: Stack(
                         alignment: Alignment.center,
@@ -1007,8 +1005,14 @@ class _EditStoryPageState extends State<EditStoryPage> {
                         children: [
                           //Creates a swipeable carousel.
                           PageView.builder(
-                            //Controls the PageView movements.
+                            //Controls the carousel movements.
                             controller: pagePreviewController,
+
+                            //Disables carousel swiping while the image is zoomed.
+                            //It prevents the user from changing to another page accidentally.
+                            physics: isCarouselImageZoomed
+                                ? const NeverScrollableScrollPhysics()
+                                : const PageScrollPhysics(),
 
                             itemCount: pages.length,
                             onPageChanged: changePreviewPage,
@@ -1020,15 +1024,15 @@ class _EditStoryPageState extends State<EditStoryPage> {
                               return Column(
                                 children: [
                                   //Selected page image preview.
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(25),
-                                    child: Image.file(
-                                      File(page.pageImage),
-                                      height: 160,
-                                      width: double.infinity,
-                                      //Crops image to fit the preview area.
-                                      fit: BoxFit.cover,
-                                    ),
+                                  StoryImagePreviewFrame(
+                                    imagePath: page.pageImage,
+                                    isZoomed: isCarouselImageZoomed,
+                                    onZoomPressed: () {
+                                      setState(() {
+                                        isCarouselImageZoomed =
+                                            !isCarouselImageZoomed;
+                                      });
+                                    },
                                   ),
 
                                   const SizedBox(height: 12),
@@ -1037,6 +1041,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                                   Chip(
                                     avatar: const Icon(
                                       Icons.auto_stories_rounded,
+                                      color: AppColors.appText,
                                       size: 18,
                                     ),
 
@@ -1048,7 +1053,12 @@ class _EditStoryPageState extends State<EditStoryPage> {
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
+                                        color: AppColors.appText,
                                       ),
+                                    ),
+                                    labelStyle: const TextStyle(
+                                      color: AppColors.appText,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
 
@@ -1061,7 +1071,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                                     textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey,
+                                      color: AppColors.appText,
                                     ),
                                   ),
                                 ],
@@ -1076,11 +1086,12 @@ class _EditStoryPageState extends State<EditStoryPage> {
                           if (pages.length > 1 && selectedPageIndex > 0)
                             Positioned(
                               left: 0,
-                              top: 175,
+                              top:
+                                  StoryImagePreviewFrame.previewFrameHeight +
+                                  16,
                               child: CircleAvatar(
-                                backgroundColor: Colors.teal.withValues(
-                                  alpha: 0.5,
-                                ),
+                                backgroundColor: AppColors.parentPrimary
+                                    .withValues(alpha: 0.5),
                                 child: IconButton(
                                   //Moves carousel to the previous page.
                                   onPressed: goToPreviousPreviewPage,
@@ -1100,11 +1111,12 @@ class _EditStoryPageState extends State<EditStoryPage> {
                               selectedPageIndex < pages.length - 1)
                             Positioned(
                               right: 0,
-                              top: 175,
+                              top:
+                                  StoryImagePreviewFrame.previewFrameHeight +
+                                  16,
                               child: CircleAvatar(
-                                backgroundColor: Colors.teal.withValues(
-                                  alpha: 0.5,
-                                ),
+                                backgroundColor: AppColors.parentPrimary
+                                    .withValues(alpha: 0.5),
                                 child: IconButton(
                                   //Moves carousel to the next page.
                                   onPressed: goToNextPreviewPage,
@@ -1120,47 +1132,16 @@ class _EditStoryPageState extends State<EditStoryPage> {
                       ),
                     ),
 
-                    //Page Indicator Dots.
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      //Creates one dot for every added page.
-                      children: List.generate(pages.length, (index) {
-                        //Checks if the dot represents the selected story preview.
-                        final bool isSelected = index == selectedPageIndex;
-
-                        //Page Indicator Dots Animation.
-                        return AnimatedContainer(
-                          //The duration of the animation.
-                          duration: const Duration(milliseconds: 250),
-
-                          //Horizontal spacing between dots.
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          height: 8,
-                          //selected dot is wider than the others.
-                          width: isSelected ? 16 : 8,
-                          decoration: BoxDecoration(
-                            //Changes selected dot's color to differentiate it
-                            //from the rest.
-                            color: isSelected
-                                ? Colors.teal
-                                : Colors.grey.withValues(alpha: 0.35),
-                            //Makes dot rounded.
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        );
-                      }),
-                    ),
-
                     const SizedBox(height: 16),
 
                     //Audio Preview Container.
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: Colors.grey.withValues(alpha: 0.25),
+                          color: AppColors.disabled.withValues(alpha: 0.25),
                           width: 1.2,
                         ),
                       ),
@@ -1171,7 +1152,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                               //Play/Pause Button.
                               IconButton(
                                 iconSize: 56,
-                                color: Colors.orange,
+                                color: AppColors.childMode,
 
                                 onPressed: () {
                                   //If the selected preview audio is playing,
@@ -1195,80 +1176,105 @@ class _EditStoryPageState extends State<EditStoryPage> {
 
                               //Expanded gives the audio player slider all the remaining horizontal space.
                               Expanded(
-                                child: Column(
-                                  children: [
-                                    //Audio Player Slider.
-                                    Slider(
-                                      min: 0,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
 
-                                      //If previewDuration is bigger than 0, it is used as the maximum
-                                      //value of the audio player slider.
-                                      //If previewDuration is 0, the maximum value becomes 1
-                                      //to avoid errors.
-                                      max:
-                                          previewDuration.inSeconds.toDouble() >
-                                              0
-                                          ? previewDuration.inSeconds.toDouble()
-                                          : 1,
+                                  child: Column(
+                                    children: [
+                                      //Audio Player Slider.
 
-                                      //The value of the slider is the current audio position.
-                                      //clamp() prevents slider's value from becoming smaller than 0 and
-                                      //bigger than the maximum audio duration.
-                                      value: previewPosition.inSeconds
-                                          .toDouble()
-                                          .clamp(
-                                            0,
-                                            previewDuration.inSeconds
-                                                        .toDouble() >
-                                                    0
-                                                ? previewDuration.inSeconds
-                                                      .toDouble()
-                                                : 1,
+                                      //Removes Slider's default horizontal padding.
+                                      SliderTheme(
+                                        data: SliderTheme.of(
+                                          context,
+                                        ).copyWith(padding: EdgeInsets.zero),
+                                        child: Slider(
+                                          min: 0,
+
+                                          //If previewDuration is bigger than 0, it is used as the maximum
+                                          //value of the audio player slider.
+                                          //If previewDuration is 0, the maximum value becomes 1
+                                          //to avoid errors.
+                                          max:
+                                              previewDuration.inSeconds
+                                                      .toDouble() >
+                                                  0
+                                              ? previewDuration.inSeconds
+                                                    .toDouble()
+                                              : 1,
+
+                                          //The value of the slider is the current audio position.
+                                          //clamp() prevents slider's value from becoming smaller than 0 and
+                                          //bigger than the maximum audio duration.
+                                          value: previewPosition.inSeconds
+                                              .toDouble()
+                                              .clamp(
+                                                0,
+                                                previewDuration.inSeconds
+                                                            .toDouble() >
+                                                        0
+                                                    ? previewDuration.inSeconds
+                                                          .toDouble()
+                                                    : 1,
+                                              ),
+
+                                          activeColor: AppColors.parentPrimary,
+                                          inactiveColor: AppColors.disabled,
+
+                                          onChanged: (value) async {
+                                            //Changes current audio position to another position
+                                            //by dragging the slider.
+                                            await pagePreviewAudioPlayer.seek(
+                                              Duration(seconds: value.toInt()),
+                                            );
+                                          },
+                                        ),
+                                      ),
+
+                                      //Audio Time Row.
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          //Current audio position.
+
+                                          //Formats seconds into MM:SS format.
+                                          Text(
+                                            formatTime(
+                                              previewPosition.inSeconds,
+                                            ),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
                                           ),
 
-                                      activeColor: Colors.teal,
-                                      inactiveColor: Colors.grey,
+                                          //Remaining audio time.
 
-                                      onChanged: (value) async {
-                                        //Changes current audio position to another position
-                                        //by dragging the slider.
-                                        await pagePreviewAudioPlayer.seek(
-                                          Duration(seconds: value.toInt()),
-                                        );
-                                      },
-                                    ),
-
-                                    //Audio Time Row.
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        //Current audio position.
-
-                                        //Formats seconds into MM:SS format.
-                                        Text(
-                                          formatTime(previewPosition.inSeconds),
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-
-                                        //Remaining audio time.
-
-                                        //Formats seconds into MM:SS format.
-                                        //clamp() prevents remaining time from becoming
-                                        //smaller than 0 and bigger than tha maximum audio duration.
-                                        Text(
-                                          formatTime(
-                                            (previewDuration - previewPosition)
-                                                .inSeconds
-                                                .clamp(
-                                                  0,
-                                                  previewDuration.inSeconds,
-                                                ),
+                                          //Formats seconds into MM:SS format.
+                                          //clamp() prevents remaining time from becoming
+                                          //smaller than 0 and bigger than tha maximum audio duration.
+                                          Text(
+                                            formatTime(
+                                              (pages[selectedPageIndex]
+                                                          .pageAudioDuration -
+                                                      previewPosition.inSeconds)
+                                                  .clamp(
+                                                    0,
+                                                    pages[selectedPageIndex]
+                                                        .pageAudioDuration,
+                                                  )
+                                                  .toInt(),
+                                            ),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
@@ -1296,7 +1302,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                       label: const Text('Change Audio'),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
                     //Delete Selected Page Button.
                     ElevatedButton.icon(
@@ -1380,7 +1386,7 @@ class _EditStoryPageState extends State<EditStoryPage> {
                             },
                             child: Text(
                               'Update',
-                              style: TextStyle(color: Colors.teal),
+                              style: TextStyle(color: AppColors.parentPrimary),
                             ),
                           ),
                         ],

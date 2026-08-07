@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../theme/app_colors.dart';
+
 //Stores the results of audio recordings.
 class AudioRecordings {
   final String audioPath;
@@ -177,7 +179,7 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(35)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
             ),
 
             child: Column(
@@ -187,7 +189,11 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                 const Text(
                   'Audio Recorder',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.appText,
+                  ),
                 ),
 
                 const SizedBox(height: 10),
@@ -195,7 +201,11 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                 Text(
                   formatRecordingTime(recordingSeconds),
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.appText,
+                  ),
                 ),
 
                 const SizedBox(height: 10),
@@ -213,7 +223,9 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                         Icon(
                           Icons.menu_book_rounded,
                           size: 100,
-                          color: isRecording ? Colors.teal : Colors.grey,
+                          color: isRecording
+                              ? AppColors.parentPrimary
+                              : AppColors.disabled,
                         ),
 
                         Positioned(
@@ -222,7 +234,9 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                           child: Icon(
                             Icons.auto_awesome_rounded,
                             size: 50,
-                            color: isRecording ? Colors.orange : Colors.grey,
+                            color: isRecording
+                                ? AppColors.childMode
+                                : AppColors.disabled,
                           ),
                         ),
 
@@ -244,8 +258,8 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                               Icons.edit_rounded,
                               size: 36,
                               color: isRecording && !isPaused
-                                  ? Colors.orange
-                                  : Colors.grey,
+                                  ? AppColors.childMode
+                                  : AppColors.disabled,
                             ),
                           ),
                         ),
@@ -268,9 +282,9 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                     fontWeight: FontWeight.bold,
                     color: isRecording
                         ? isPaused
-                              ? Colors.grey
-                              : Colors.orange
-                        : Colors.grey,
+                              ? AppColors.disabled
+                              : AppColors.childMode
+                        : AppColors.disabled,
                   ),
                 ),
 
@@ -282,7 +296,7 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                     //Start / Pause / Resume Button.
                     IconButton(
                       iconSize: 60,
-                      color: Colors.orange,
+                      color: AppColors.childMode,
 
                       onPressed: () {
                         if (!isRecording) {
@@ -306,7 +320,7 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
                     //Stop and Save Button.
                     IconButton(
                       iconSize: 60,
-                      color: Colors.teal,
+                      color: AppColors.parentPrimary,
                       onPressed: isRecording
                           ? () async {
                               await stopRecording(setModalState);

@@ -5,8 +5,9 @@ import 'package:local_auth/local_auth.dart';
 //My Imports
 import 'parent_list_page.dart';
 import 'child_list_page.dart';
-import '../widgets/app_background.dart';
+import '../widgets/section_card.dart';
 import '../widgets/role_selection_card.dart';
+import '../theme/app_colors.dart';
 
 //First Page of the application
 //The user selects between Parent Mode and Child role.
@@ -55,9 +56,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
       //If authentication can't be used, shows appropriate message.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Parent Mode requires device authentication.',
-          ),
+          content: Text('Parent Mode requires device authentication.'),
         ),
       );
       return false;
@@ -83,19 +82,12 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                   child: Container(
                     height: 230,
                     width: 230,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.teal,
-                      shape: BoxShape.rectangle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
+
+                    child: Image.asset(
+                      'images/logo.png',
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
                     ),
-                    child: Image.asset('images/logo.png', fit: BoxFit.contain),
                   ),
                 ),
 
@@ -107,7 +99,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    //color: Colors.white,
+                    color: AppColors.appText,
                   ),
                 ),
 
@@ -116,74 +108,77 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                 const Text(
                   'Create and listen to personalized audio stories.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    //color: Colors.white,
-                  ),
+                  style: TextStyle(fontSize: 20, color: AppColors.appText),
                 ),
 
                 const SizedBox(height: 32),
 
-                const Text(
-                  'Select your role:',
-                  style: TextStyle(
-                    fontSize: 25,
-                    //color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 32),
-
-                Row(
+                //Role Selection Section Card.
+                SectionCard(
+                  sectionCardMargin: EdgeInsets.zero,
                   children: [
-                    //Child Mode Card.
-                    RoleSelectionCard(
-                      title: 'Child',
-                      subtitle: 'Listen to stories',
-                      icon: Icons.child_care_rounded,
-                      color: Colors.orange,
-                      onTap: () {
-                        //Opens Child List Page.
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChildListPage(),
-                          ),
-                        );
-                      },
+                    const Text(
+                      'Select your role:',
+                      style: TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.appText,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(width: 16),
 
-                    //Parent Mode Card.
-                    RoleSelectionCard(
-                      title: 'Parent',
-                      subtitle: 'Create and Manage',
-                      icon: Icons.lock_person_rounded,
-                      color: Colors.teal,
-                      onTap: () async {
-                        final bool isAuthenticated =
-                            await authenticateParentMode();
+                    const SizedBox(height: 32),
 
-                        //If authentication fails, Parent Mode doesn't open.
-                        if (!isAuthenticated) {
-                          return;
-                        }
-                        //Opens Parent List Page.
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ParentListPage(),
-                          ),
-                        );
-                      },
+                    Row(
+                      children: [
+                        //Child Mode Card.
+                        RoleSelectionCard(
+                          title: 'Child',
+                          subtitle: 'Listen to stories',
+                          icon: Icons.child_care_rounded,
+                          color: AppColors.childMode,
+                          onTap: () {
+                            //Opens Child List Page.
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChildListPage(),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 16),
+
+                        //Parent Mode Card.
+                        RoleSelectionCard(
+                          title: 'Parent',
+                          subtitle: 'Create and Manage',
+                          icon: Icons.lock_person_rounded,
+                          color: AppColors.parentMode,
+                          onTap: () async {
+                            final bool isAuthenticated =
+                                await authenticateParentMode();
+
+                            //If authentication fails, Parent Mode doesn't open.
+                            if (!isAuthenticated) {
+                              return;
+                            }
+                            //Opens Parent List Page.
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ParentListPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ],
             ),
           ),
-      // ),
     );
   }
 }

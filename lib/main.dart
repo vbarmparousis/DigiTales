@@ -1,5 +1,6 @@
 //Import Packages
 import 'package:digital_storytelling_app/splash_screen.dart';
+import 'package:digital_storytelling_app/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +38,8 @@ class DigitalStorytellingApp extends StatelessWidget {
 
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
+
+        scaffoldBackgroundColor: AppColors.appBackground,
 
         //Default style for AppBar.
         appBarTheme: const AppBarTheme(
