@@ -1,8 +1,8 @@
-//Import  Libraries
+//Library Imports
 import 'dart:convert';
 import 'dart:io';
 
-//Import Packages
+//Package Imports
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -63,6 +63,14 @@ class StoryImport {
       jsonDecode(storyJsonText),
     );
 
+    //Gets pages data from story.json.
+    final List pagesData = storyData['pages'] ?? [];
+
+    //If the imported story doesn't have any pages, the import fails.
+    if (pagesData.isEmpty) {
+      throw Exception('The imported story contains no pages');
+    }
+
     //Gets app's local document directory.
     final appDirectory = await getApplicationDocumentsDirectory();
 
@@ -75,9 +83,6 @@ class StoryImport {
 
     //Creates the imported story page list.
     final List<StoryPage> importedPages = [];
-
-    //Gets pages data from story.json.
-    final List pagesData = storyData['pages'] ?? [];
 
     //Copies every imported page image and audio into the app storage.
     for (int index = 0; index < pagesData.length; index++) {

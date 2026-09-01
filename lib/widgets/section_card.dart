@@ -24,7 +24,7 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    //Checks if section has tittle and icon
+    //Checks if section has title and icon.
     final bool hasIconTitle = (title != null && icon != null);
 
     return Container(

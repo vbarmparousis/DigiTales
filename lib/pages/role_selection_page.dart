@@ -1,5 +1,6 @@
-//Import Packages
+//Package Imports
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
 //My Imports
@@ -11,14 +12,14 @@ import '../theme/app_colors.dart';
 
 //First Page of the application
 //The user selects between Parent Mode and Child role.
-class UserSelectionPage extends StatefulWidget {
-  const UserSelectionPage({super.key});
+class RoleSelectionPage extends StatefulWidget {
+  const RoleSelectionPage({super.key});
 
   @override
-  State<UserSelectionPage> createState() => _UserSelectionPageState();
+  State<RoleSelectionPage> createState() => _RoleSelectionPageState();
 }
 
-class _UserSelectionPageState extends State<UserSelectionPage> {
+class _RoleSelectionPageState extends State<RoleSelectionPage> {
   //Device Authentication for Parent Mode.
   final LocalAuthentication parentModeAuthentication = LocalAuthentication();
 
@@ -33,6 +34,11 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
 
       //If authentication is not available, shows appropriate message.
       if (!canAuthenticate) {
+        //Stops the function if the page is no longer active.
+        if (!mounted) {
+          return false;
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Device authentication is not available.'),
@@ -53,6 +59,11 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
     }
     //Handles errors during authentication.
     catch (error) {
+      //Stops the function if the page is no longer active.
+      if (!mounted) {
+        return false;
+      }
+
       //If authentication can't be used, shows appropriate message.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -65,11 +76,15 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body:
-          // AppBackground(
-          //child:
-          Padding(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        statusBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
             //Adds spacing so the UI doesn't touch the screen borders.
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -79,7 +94,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
               children: [
                 //Application Logo.
                 Center(
-                  child: Container(
+                  child: SizedBox(
                     height: 230,
                     width: 230,
 
@@ -94,7 +109,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                 const SizedBox(height: 25),
 
                 const Text(
-                  'Your Digital Storytelling Buddy',
+                  'From Paper to Digital Stories',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
@@ -106,7 +121,7 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                 const SizedBox(height: 10),
 
                 const Text(
-                  'Create and listen to personalized audio stories.',
+                  'Create digital stories and listen to them in a familiar voice.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 20, color: AppColors.appText),
                 ),
@@ -114,71 +129,87 @@ class _UserSelectionPageState extends State<UserSelectionPage> {
                 const SizedBox(height: 32),
 
                 //Role Selection Section Card.
-                SectionCard(
-                  sectionCardMargin: EdgeInsets.zero,
-                  children: [
-                    const Text(
-                      'Select your role:',
-                      style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.appText,
+                Expanded(
+                  child: SectionCard(
+                    sectionCardMargin: EdgeInsets.zero,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            const Text(
+                              'Who is using DigiTales?',
+                              style: TextStyle(
+                                fontSize: 25,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.appText,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                //Child Mode Card.
+                                RoleSelectionCard(
+                                  title: 'Child',
+                                  subtitle: 'Listen to Stories',
+                                  icon: Icons.child_care_rounded,
+                                  color: AppColors.childMode,
+                                  onTap: () {
+                                    //Opens Child List Page.
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ChildListPage(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 16),
+
+                                //Parent Mode Card.
+                                RoleSelectionCard(
+                                  title: 'Parent',
+                                  subtitle: 'Create & Manage Stories',
+                                  icon: Icons.lock_person_rounded,
+                                  color: AppColors.parentMode,
+                                  onTap: () async {
+                                    final bool isAuthenticated =
+                                        await authenticateParentMode();
+
+                                    //If authentication fails, Parent Mode doesn't open.
+                                    if (!isAuthenticated) {
+                                      return;
+                                    }
+
+                                    //Stops the function if the page is no longer active.
+                                    if (!context.mounted) {
+                                      return;
+                                    }
+
+                                    //Opens Parent List Page.
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ParentListPage(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const SizedBox(height: 32),
-
-                    Row(
-                      children: [
-                        //Child Mode Card.
-                        RoleSelectionCard(
-                          title: 'Child',
-                          subtitle: 'Listen to stories',
-                          icon: Icons.child_care_rounded,
-                          color: AppColors.childMode,
-                          onTap: () {
-                            //Opens Child List Page.
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChildListPage(),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 16),
-
-                        //Parent Mode Card.
-                        RoleSelectionCard(
-                          title: 'Parent',
-                          subtitle: 'Create and Manage',
-                          icon: Icons.lock_person_rounded,
-                          color: AppColors.parentMode,
-                          onTap: () async {
-                            final bool isAuthenticated =
-                                await authenticateParentMode();
-
-                            //If authentication fails, Parent Mode doesn't open.
-                            if (!isAuthenticated) {
-                              return;
-                            }
-                            //Opens Parent List Page.
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ParentListPage(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
     );
   }
 }

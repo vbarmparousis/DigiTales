@@ -1,4 +1,4 @@
-//Import Packages
+//Package Imports
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -13,8 +13,6 @@ class AppColors {
   static const Color childMode = Color(0xFFDD662A);
 
   static const Color appBackground = Color(0xFFC6D6D6);
-
-  static const Color storyAppBar = Color(0xFFD38B5D);
 
   static const Color appText = Color(0xFF064247);
 

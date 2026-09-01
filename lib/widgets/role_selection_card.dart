@@ -1,4 +1,4 @@
-//Import Packages
+//Package Imports
 import 'package:flutter/material.dart';
 
 //Reusable card for selecting Child or Parent mode.
@@ -59,7 +59,7 @@ class RoleSelectionCard extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-              //const SizedBox(height: 6),
+
               Text(
                 subtitle,
                 textAlign: TextAlign.center,

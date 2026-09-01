@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 //Reusable Story Book Cover.
-//ChildStoryPage: Full size version.
+//StoryTimePage: Full size version.
 //ChildListPage: Miniature version.
 //ParentListPage: Miniature version, no title.
 

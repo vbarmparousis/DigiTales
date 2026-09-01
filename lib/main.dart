@@ -1,9 +1,11 @@
-//Import Packages
-import 'package:digital_storytelling_app/splash_screen.dart';
-import 'package:digital_storytelling_app/theme/app_colors.dart';
+//Package Imports
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/services.dart';
+
+//My Imports
+import 'splash_screen.dart';
+import 'theme/app_colors.dart';
 
 Future<void> main() async {
   //Ensures Flutter is fully initialized before
@@ -18,6 +20,9 @@ Future<void> main() async {
 
   //Locks application orientation to portrait mode only.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+  //Allows the application to draw behind the system bars.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   //Starts Application.
   runApp(const DigitalStorytellingApp());
@@ -36,21 +41,20 @@ class DigitalStorytellingApp extends StatelessWidget {
         //Sets Nunito as the default font of the app.
         fontFamily: 'Nunito',
 
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.parentPrimary),
         useMaterial3: true,
 
         scaffoldBackgroundColor: AppColors.appBackground,
 
-        //Default style for AppBar.
-        appBarTheme: const AppBarTheme(
-          titleTextStyle: TextStyle(
-            color: Colors.black,
-            fontSize: 25,
-            fontWeight: FontWeight.bold,
-
-            //Sets Nunito as the default font of the AppBar.
-            fontFamily: 'Nunito',
+        //Default style for SnackBars.
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.appText,
+          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
+          insetPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
         ),
       ),
 

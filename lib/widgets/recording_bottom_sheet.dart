@@ -1,22 +1,25 @@
-//Import Packages
+//Library Imports
 import 'dart:async';
+
+//Package Imports
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 
+//My Imports
 import '../theme/app_colors.dart';
 
 //Stores the results of audio recordings.
-class AudioRecordings {
+class AudioRecording {
   final String audioPath;
   final int audioDuration;
 
-  AudioRecordings({required this.audioPath, required this.audioDuration});
+  AudioRecording({required this.audioPath, required this.audioDuration});
 }
 
 //Audio recording bottom sheet popup
 //Returns recorded audio path and duration when finished.
-Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
+Future<AudioRecording?> showRecordingBottomSheet(BuildContext context) async {
   //Controls audio recording
   final AudioRecorder audioRecorder = AudioRecorder();
 
@@ -54,7 +57,10 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
 
   //Function that starts audio recording.
   //StateSetter updates the UI inside the bottom sheet.
-  Future<void> startRecording(StateSetter setModalState) async {
+  Future<void> startRecording(
+    BuildContext context,
+    StateSetter setModalState,
+  ) async {
     //Prevents the start of another recording while
     //an audio is already being recorded.
     if (isRecording) return;
@@ -65,7 +71,11 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
 
       //Gets the application's local document directory.
       final directory = await getApplicationDocumentsDirectory();
-      //print('Path=============================: ${directory.path}');
+
+      //Stops the function if the page is no longer active.
+      if (!context.mounted) {
+        return;
+      }
 
       //Creates unique filenames and replaces special character
       //in the date in order to avoid errors on filename path.
@@ -83,7 +93,16 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
       audioPath = filePath;
 
       //Starts Recording audio and saves it into the previously created path
-      await audioRecorder.start(const RecordConfig(), path: audioPath);
+      await audioRecorder.start(
+        const RecordConfig(numChannels: 1, noiseSuppress: true),
+        path: audioPath,
+      );
+
+      //Cancels the unfinished recording if the recording bottom is no longer active.
+      if (!context.mounted) {
+        await audioRecorder.cancel();
+        return;
+      }
 
       //Updates the UI and sets isRecording as true.
       setModalState(() {
@@ -91,6 +110,12 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
       });
 
       recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        //Stops the timer if the recording bottom sheet is no longer active.
+        if (!context.mounted) {
+          timer.cancel();
+          return;
+        }
+
         //Updates UI every second
         setModalState(() {
           //Increase recording duration by 1 second.
@@ -101,16 +126,33 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
         });
       });
     } else {
-      //print ('Microphone Permission Denied');
+      //Shows a message when microphone permission is denied.
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Microphone permission is required to record narration.',
+            ),
+          ),
+        );
+      }
     }
   }
 
   //Function that pauses audio recording.
-  Future<void> pauseRecording(StateSetter setModalState) async {
+  Future<void> pauseRecording(
+    BuildContext context,
+    StateSetter setModalState,
+  ) async {
     if (!isRecording || isPaused) return;
 
     await audioRecorder.pause();
     recordingTimer?.cancel();
+
+    //Stops the function if the recording bottom sheet is no longer active.
+    if (!context.mounted) {
+      return;
+    }
 
     setModalState(() {
       isPaused = true;
@@ -118,16 +160,30 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
   }
 
   //Function that resumes paused audio recording.
-  Future<void> resumeRecording(StateSetter setModalState) async {
+  Future<void> resumeRecording(
+    BuildContext context,
+    StateSetter setModalState,
+  ) async {
     if (!isRecording || !isPaused) return;
 
     await audioRecorder.resume();
+
+    //Stops the function if the recording bottom sheet is no longer active.
+    if (!context.mounted) {
+      return;
+    }
 
     setModalState(() {
       isPaused = false;
     });
 
     recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      //Stops the timer if the recording bottom sheet is no longer active.
+      if (!context.mounted) {
+        timer.cancel();
+        return;
+      }
+
       //Updates UI every second
       setModalState(() {
         //Increase recording duration by 1 second.
@@ -140,7 +196,10 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
   }
 
   //Stops audio recording.
-  Future<void> stopRecording(StateSetter setModalState) async {
+  Future<void> stopRecording(
+    BuildContext context,
+    StateSetter setModalState,
+  ) async {
     //Prevents stopping if there is no active audio recording
     if (!isRecording) return;
 
@@ -149,6 +208,11 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
 
     //Stops recording timer.
     recordingTimer?.cancel();
+
+    //Stops the function if the recording bottom sheet is no longer active.
+    if (!context.mounted) {
+      return;
+    }
 
     //Updates recording state to false and saves the final audio path.
     setModalState(() {
@@ -166,7 +230,7 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
     });
   }
 
-  return showModalBottomSheet<AudioRecordings>(
+  final AudioRecording? recording = await showModalBottomSheet<AudioRecording>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -176,175 +240,199 @@ Future<AudioRecordings?> showRecordingBottomSheet(BuildContext context) {
         builder: (context, setModalState) {
           return Container(
             height: 400,
-            padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
             ),
 
-            child: Column(
-              //Column stretches widgets vertically.
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Audio Recorder',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.appText,
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                Text(
-                  formatRecordingTime(recordingSeconds),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.appText,
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                //Decorative animation that changes
-                //pencil icon position every second during recording.
-                Center(
-                  child: SizedBox(
-                    key: ValueKey(pencilAnimationIndex),
-                    height: 90,
-                    width: 140,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          Icons.menu_book_rounded,
-                          size: 100,
-                          color: isRecording
-                              ? AppColors.parentPrimary
-                              : AppColors.disabled,
-                        ),
-
-                        Positioned(
-                          top: 2,
-                          left: 5,
-                          child: Icon(
-                            Icons.auto_awesome_rounded,
-                            size: 50,
-                            color: isRecording
-                                ? AppColors.childMode
-                                : AppColors.disabled,
-                          ),
-                        ),
-
-                        //Moving Pencil.
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeInOut,
-                          bottom: 33,
-
-                          //Move pencil left -> middle ->right
-                          left: pencilAnimationIndex == 0
-                              ? 67
-                              : pencilAnimationIndex == 1
-                              ? 77
-                              : 87,
-                          child: Transform.rotate(
-                            angle: -0.3,
-                            child: Icon(
-                              Icons.edit_rounded,
-                              size: 36,
-                              color: isRecording && !isPaused
-                                  ? AppColors.childMode
-                                  : AppColors.disabled,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                Text(
-                  isRecording
-                      ? isPaused
-                            ? 'Recording Paused'
-                            : 'Recording...'
-                      : 'Not Recording',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isRecording
-                        ? isPaused
-                              ? AppColors.disabled
-                              : AppColors.childMode
-                        : AppColors.disabled,
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  //Column stretches widgets vertically.
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    //Start / Pause / Resume Button.
-                    IconButton(
-                      iconSize: 60,
-                      color: AppColors.childMode,
-
-                      onPressed: () {
-                        if (!isRecording) {
-                          startRecording(setModalState);
-                        } else if (isPaused) {
-                          resumeRecording(setModalState);
-                        } else {
-                          pauseRecording(setModalState);
-                        }
-                      },
-
-                      icon: Icon(
-                        isRecording && !isPaused
-                            ? Icons.pause_circle_outline_rounded
-                            : Icons.play_circle_filled_rounded,
+                    const Text(
+                      'Audio Recorder',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.appText,
                       ),
                     ),
 
-                    const SizedBox(width: 24),
+                    const SizedBox(height: 10),
 
-                    //Stop and Save Button.
-                    IconButton(
-                      iconSize: 60,
-                      color: AppColors.parentPrimary,
-                      onPressed: isRecording
-                          ? () async {
-                              await stopRecording(setModalState);
-                              if (audioPath.isNotEmpty) {
-                                Navigator.pop(
-                                  context,
-                                  AudioRecordings(
-                                    audioPath: audioPath,
-                                    audioDuration: audioDuration,
-                                  ),
-                                );
-                              }
+                    Text(
+                      formatRecordingTime(recordingSeconds),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.appText,
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    //Decorative animation that changes
+                    //pencil icon position every second during recording.
+                    Center(
+                      child: SizedBox(
+                        key: ValueKey(pencilAnimationIndex),
+                        height: 90,
+                        width: 140,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Icon(
+                              Icons.menu_book_rounded,
+                              size: 100,
+                              color: isRecording
+                                  ? AppColors.parentPrimary
+                                  : AppColors.disabled,
+                            ),
+
+                            Positioned(
+                              top: 2,
+                              left: 5,
+                              child: Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 50,
+                                color: isRecording
+                                    ? AppColors.childMode
+                                    : AppColors.disabled,
+                              ),
+                            ),
+
+                            //Moving Pencil.
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeInOut,
+                              bottom: 33,
+
+                              //Move pencil left -> middle ->right
+                              left: pencilAnimationIndex == 0
+                                  ? 67
+                                  : pencilAnimationIndex == 1
+                                  ? 77
+                                  : 87,
+                              child: Transform.rotate(
+                                angle: -0.3,
+                                child: Icon(
+                                  Icons.edit_rounded,
+                                  size: 36,
+                                  color: isRecording && !isPaused
+                                      ? AppColors.childMode
+                                      : AppColors.disabled,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text(
+                      isRecording
+                          ? isPaused
+                                ? 'Recording Paused'
+                                : 'Recording...'
+                          : 'Not Recording',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isRecording
+                            ? isPaused
+                                  ? AppColors.disabled
+                                  : AppColors.childMode
+                            : AppColors.disabled,
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        //Start / Pause / Resume Button.
+                        IconButton(
+                          iconSize: 60,
+                          color: AppColors.childMode,
+
+                          onPressed: () {
+                            if (!isRecording) {
+                              startRecording(context, setModalState);
+                            } else if (isPaused) {
+                              resumeRecording(context, setModalState);
+                            } else {
+                              pauseRecording(context, setModalState);
                             }
-                          : null,
+                          },
 
-                      icon: const Icon(Icons.check_circle_rounded),
+                          icon: Icon(
+                            isRecording && !isPaused
+                                ? Icons.pause_circle_outline_rounded
+                                : Icons.play_circle_filled_rounded,
+                          ),
+                        ),
+
+                        const SizedBox(width: 24),
+
+                        //Stop and Save Button.
+                        IconButton(
+                          iconSize: 60,
+                          color: AppColors.parentPrimary,
+                          onPressed: isRecording
+                              ? () async {
+                                  await stopRecording(context, setModalState);
+
+                                  //Stops the function if the page is no longer active.
+                                  if (!context.mounted) {
+                                    return;
+                                  }
+
+                                  if (audioPath.isNotEmpty) {
+                                    Navigator.pop(
+                                      context,
+                                      AudioRecording(
+                                        audioPath: audioPath,
+                                        audioDuration: audioDuration,
+                                      ),
+                                    );
+                                  }
+                                }
+                              : null,
+
+                          icon: const Icon(Icons.check_circle_rounded),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           );
         },
       );
     },
   );
+
+  //Stops the recording timer when the bottom sheet closes.
+  recordingTimer?.cancel();
+
+  //Cancels an unfinished recording when the bottom sheet closes.
+  if (isRecording) {
+    await audioRecorder.cancel();
+  }
+
+  //Disposes the audio recorder.
+  await audioRecorder.dispose();
+
+  return recording;
 }

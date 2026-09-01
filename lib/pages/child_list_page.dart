@@ -1,8 +1,9 @@
-//Import Libraries
+//Library Imports
 import 'dart:io';
 
-//Import Packages
+//Package Imports
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 
 //My Imports
@@ -10,11 +11,19 @@ import '../models/story.dart';
 import '../theme/app_colors.dart';
 import '../widgets/custom_app_bar.dart';
 import '../widgets/section_card.dart';
-import 'child_story_page.dart';
+import 'story_time_page.dart';
 import '../widgets/story_book_cover.dart';
 
-class ChildListPage extends StatelessWidget {
+class ChildListPage extends StatefulWidget {
   const ChildListPage({super.key});
+
+  @override
+  State<ChildListPage> createState() => _ChildListPageState();
+}
+
+class _ChildListPageState extends State<ChildListPage> {
+  //Prevent opening multiple StoryTime pages at the same time.
+  bool isOpeningStory = false;
 
   //Calculates a suitable decoding width for the story pages.
   int calculateStoryImageCacheWidth(BuildContext context) {
@@ -80,134 +89,154 @@ class ChildListPage extends StatelessWidget {
     //Grants access to Hive Story Box
     final storyBox = Hive.box('storyBox');
 
-    return Scaffold(
-      appBar: CustomAppBar(
-        title: 'Library',
-        foregroundColor: Colors.white,
-        textColor: Colors.white,
-        backgroundColor: AppColors.childMode,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+        statusBarIconBrightness: Brightness.light,
       ),
-      body: Padding(
-        //Adds spacing so the UI doesn't touch the screen borders.
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-        child: Column(
-          //Column stretches widgets vertically.
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            //Page Title Section Card.
-            //SectionCard(
-            //children: [
-            const Text(
-              'Choose a story to listen',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.appText,
-              ),
-            ),
+      child: Scaffold(
+        appBar: CustomAppBar(
+          title: 'Library',
+          foregroundColor: Colors.white,
+          textColor: Colors.white,
+          backgroundColor: AppColors.childMode,
+        ),
+        body: SafeArea(
+          //the AppBar already protects the top system area so top:false.
+          top: false,
+          child: Padding(
+            //Adds spacing so the UI doesn't touch the screen borders.
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            child: Column(
+              //Column stretches widgets vertically.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Choose a story to listen to',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.appText,
+                  ),
+                ),
 
-            // ],
-            //),
-            const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-            //Story Grid Section Card.
-            Expanded(
-              child: SectionCard(
-                children: [
-                  Expanded(
-                    //Checks if there are no stored stories in hive story box.
-                    //If hive box is empty, shows the appropriate message on screen.
-                    child: storyBox.isEmpty
-                        ? const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.book_rounded,
-                                  size: 100,
-                                  color: AppColors.appText,
+                //Story Grid Section Card.
+                Expanded(
+                  child: SectionCard(
+                    children: [
+                      Expanded(
+                        //Checks if there are no stored stories in hive story box.
+                        //If hive box is empty, shows the appropriate message on screen.
+                        child: storyBox.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.book_rounded,
+                                      size: 100,
+                                      color: AppColors.appText,
+                                    ),
+
+                                    const SizedBox(height: 32),
+                                    Text(
+                                      'There are no stories yet.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        color: AppColors.appText,
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                              )
+                            :
+                              //Dynamic List Creation
+                              //Creates a scrollable grid of story cards.
+                              GridView.builder(
+                                itemCount: storyBox.length,
 
-                                SizedBox(height: 32),
-                                Text(
-                                  'There are no stories yet.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 20),
-                                ),
-                              ],
-                            ),
-                          )
-                        :
-                          //Dynamic List Creation
-                          //Creates a scrollable grid of story cards.
-                          GridView.builder(
-                            itemCount: storyBox.length,
+                                //Grid layout:
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                      //Shows 2 story cards per row.
+                                      crossAxisCount: 2,
+                                      //Horizontal space between story cards.
+                                      crossAxisSpacing: 10,
+                                      //Vertical space between story cards.
+                                      mainAxisSpacing: 10,
+                                      //Width/Height Ratio.
+                                      childAspectRatio: 0.60,
+                                    ),
 
-                            //Grid layout:
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  //Shows 2 story cards per row.
-                                  crossAxisCount: 2,
-                                  //Horizontal space between story cards.
-                                  crossAxisSpacing: 10,
-                                  //Vertical space between story cards.
-                                  mainAxisSpacing: 10,
-                                  //Width/Height Ratio.
-                                  childAspectRatio: 0.60,
-                                ),
+                                //Story card builder.
+                                itemBuilder: (context, index) {
+                                  //Loads a stored story from
+                                  //Hive Story Box using its index position.
+                                  final loadedStory = storyBox.getAt(index);
 
-                            //Story card builder.
-                            itemBuilder: (context, index) {
-                              //Loads a stored story from
-                              //Hive Story Box using its index position.
-                              final loadedStory = storyBox.getAt(index);
+                                  //Converts Hive Map data into real Story object.
+                                  final story = Story.fromMap(loadedStory);
 
-                              //Converts Hive Map data into real Story object.
-                              final story = Story.fromMap(loadedStory);
+                                  //Inkwell makes the whole story card tappable.
+                                  return InkWell(
+                                    //Tap effect follows rounder card corners.
+                                    borderRadius: BorderRadius.circular(20),
 
-                              //Inkwell makes the whole story card tappable.
-                              return InkWell(
-                                //Tap effect follows rounder card corners.
-                                borderRadius: BorderRadius.circular(20),
+                                    //Opens selected story and sends the Story
+                                    //object to the StoryTimePage.
+                                    onTap: () async {
+                                      //Stops another story from opening while one is already opening.
+                                      if (isOpeningStory) {
+                                        return;
+                                      }
 
-                                //Opens selected story and sends the Story
-                                //object to the ChildStoryPage.
-                                onTap: () async {
-                                  //Prepares the cover and first pages before opening ChildStoryPage.
-                                  await precacheStoryImagesBeforeOpening(
-                                    context,
-                                    story,
-                                  );
+                                      isOpeningStory = true;
 
-                                  if (!context.mounted) {
-                                    return;
-                                  }
+                                      //Prepares the cover and first pages before opening StoryTimePage.
+                                      await precacheStoryImagesBeforeOpening(
+                                        context,
+                                        story,
+                                      );
 
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ChildStoryPage(story: story),
+                                      if (!context.mounted) {
+                                        return;
+                                      }
+
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => StoryTimePage(
+                                            story: story,
+                                            mode: StoryTimeMode.child,
+                                          ),
+                                        ),
+                                      );
+
+                                      isOpeningStory = false;
+                                    },
+
+                                    //Miniature Book Cover.
+                                    child: StoryBookCover(
+                                      title: story.title,
+                                      imagePath: story.coverImage,
+                                      imageCacheWidth: 700,
+                                      isMiniatureMode: true,
                                     ),
                                   );
                                 },
-
-                                //Miniature Book Cover.
-                                child: StoryBookCover(
-                                  title: story.title,
-                                  imagePath: story.coverImage,
-                                  imageCacheWidth: 700,
-                                  isMiniatureMode: true,
-                                ),
-                              );
-                            },
-                          ),
+                              ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
