@@ -1,6 +1,6 @@
 # digital_storytelling_app
 
-Digital Storytelling App
+DigiTales
 
 ## Getting Started
 
