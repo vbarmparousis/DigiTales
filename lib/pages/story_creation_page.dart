@@ -537,7 +537,7 @@ class _StoryCreationPageState extends State<StoryCreationPage> {
       }
 
       //Lowers the volume of background music.
-      await backgroundMusicAudioPlayer.setVolume(0.08);
+      await backgroundMusicAudioPlayer.setVolume(0.04);
 
       //Stops the function if the page is no longer active.
       if (!mounted) {
@@ -924,7 +924,7 @@ class _StoryCreationPageState extends State<StoryCreationPage> {
               //Adds spacing so the UI doesn't touch the screen borders.
               padding: const EdgeInsets.all(24),
               child: Column(
-                //Column stretches widgets vertically.
+                //Stretches the children horizontally across the available width.
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   //1. Section Card: Story Details (Title + Cover Image).

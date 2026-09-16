@@ -66,7 +66,7 @@ class _StoryTimePageState extends State<StoryTimePage> {
   static const double pageAudioVolume = 1.0;
 
   //Controls the background music volume.
-  static const double backgroundMusicVolume = 0.08;
+  static const double backgroundMusicVolume = 0.04;
 
   //Checks if automatic page turning is enabled.
   bool isAutoplayEnabled = false;

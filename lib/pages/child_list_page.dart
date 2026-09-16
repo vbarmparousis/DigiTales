@@ -22,7 +22,7 @@ class ChildListPage extends StatefulWidget {
 }
 
 class _ChildListPageState extends State<ChildListPage> {
-  //Prevent opening multiple StoryTime pages at the same time.
+  //Prevents opening multiple StoryTime pages at the same time.
   bool isOpeningStory = false;
 
   //Calculates a suitable decoding width for the story pages.
@@ -109,7 +109,7 @@ class _ChildListPageState extends State<ChildListPage> {
             //Adds spacing so the UI doesn't touch the screen borders.
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
             child: Column(
-              //Column stretches widgets vertically.
+              //Stretches the children horizontally across the available width.
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
@@ -175,9 +175,16 @@ class _ChildListPageState extends State<ChildListPage> {
 
                                 //Story card builder.
                                 itemBuilder: (context, index) {
+                                  //Calculates the story index in reverse order
+                                  //so the newest stories are displayed first.
+                                  final reverseIndex =
+                                      storyBox.length - 1 - index;
+
                                   //Loads a stored story from
-                                  //Hive Story Box using its index position.
-                                  final loadedStory = storyBox.getAt(index);
+                                  //Hive Story Box using its reverse index position.
+                                  final loadedStory = storyBox.getAt(
+                                    reverseIndex,
+                                  );
 
                                   //Converts Hive Map data into real Story object.
                                   final story = Story.fromMap(loadedStory);

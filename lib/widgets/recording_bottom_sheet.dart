@@ -239,7 +239,6 @@ Future<AudioRecording?> showRecordingBottomSheet(BuildContext context) async {
       return StatefulBuilder(
         builder: (context, setModalState) {
           return Container(
-            height: 400,
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
@@ -247,10 +246,13 @@ Future<AudioRecording?> showRecordingBottomSheet(BuildContext context) async {
 
             child: SafeArea(
               top: false,
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  //Column stretches widgets vertically.
+                  //Uses only the vertical space required.
+                  mainAxisSize: MainAxisSize.min,
+
+                  //Stretches the children horizontally across the available width.
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(

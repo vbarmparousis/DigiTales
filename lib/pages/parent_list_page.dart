@@ -42,7 +42,7 @@ class _ParentListPageState extends State<ParentListPage> {
   //Stores current sorting option.
   String sortingOption = 'A-Z';
 
-  //Prevent opening multiple StoryTime pages at the same time.
+  //Prevents opening multiple StoryTime pages at the same time.
   bool isOpeningStory = false;
 
   //Formats audio duration into HH:MM:SS format.

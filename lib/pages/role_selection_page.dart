@@ -89,7 +89,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              //Column stretches widgets vertically.
+              //Stretches the children horizontally across the available width.
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 //Application Logo.
